@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lemon Scooter Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --lemon-primary: #D4FF00;
+            --bg-dark: #121212;
+            --card-bg: #1E1E1E;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-dark);
+            color: white;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            color: var(--lemon-primary);
+            text-align: center;
+            font-style: italic;
+            letter-spacing: 2px;
+        }
+        .card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        select, input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #252525;
+            color: white;
+            font-size: 16px;
+        }
+        button {
+            background: var(--lemon-primary);
+            color: black;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        #map {
+            height: 250px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        #qrcode {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 10px;
+        }
+        .status {
+            text-align: center;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .success { color: var(--lemon-primary); }
+        .error { color: #ff4444; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LEMON SIMULATOR</h1>
+        
+        <div class="card">
+            <div class="label">SELECT SCOOTER</div>
+            <select id="scooterSelect">
+                <option value="">Loading scanners...</option>
+            </select>
+            
+            <div id="controls" style="display:none">
+                <div class="label">BATTERY LEVEL (%)</div>
+                <input type="range" id="batterySlider" min="0" max="100" value="100">
+                <div style="text-align: right;" id="batteryVal">100%</div>
+                
+                <div class="label">LOCATION (Drag marker to move)</div>
+                <div id="map"></div>
+                
+                <button id="updateBtn">SEND UPDATE SIGNAL</button>
+                <div id="status" class="status"></div>
+            </div>
+        </div>
+        <div class="card" id="qrCard" style="display:none">
+            <div class="label" style="text-align:center">SCAN ME WITH LEMON APP</div>
+            <div id="qrcode"></div>
+            <div class="label" style="text-align:center; margin-top:10px" id="scooterIdLabel"></div>
+        </div>
+    </div>
+    <script>
+        const SUPABASE_URL = "https://vheohhpaoqinyjedxemz.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_WsqweqtE2-h0iiKT7ejYhw_Rcv3WUTp";
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let selectedScooter = null;
+        let map, marker;
+        let qrcode = new QRCode(document.getElementById("qrcode"), {
+            width: 200,
+            height: 200
+        });
+        async function loadScooters() {
+            const { data, error } = await supabase.from('scooters').select('*');
+            if (error) {
+                console.error(error);
+                return;
+            }
+            
+            const select = document.getElementById('scooterSelect');
+            select.innerHTML = '<option value="">Choose a scooter...</option>' + 
+                data.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            
+            select.onchange = (e) => {
+                const scooter = data.find(s => s.id === e.target.value);
+                if (scooter) selectScooter(scooter);
+            };
+        }
+        function selectScooter(scooter) {
+            selectedScooter = scooter;
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('qrCard').style.display = 'block';
+            document.getElementById('batterySlider').value = scooter.battery_level;
+            document.getElementById('batteryVal').innerText = scooter.battery_level + '%';
+            document.getElementById('scooterIdLabel').innerText = scooter.id;
+            
+            // Generate QR Code
+            qrcode.clear();
+            qrcode.makeCode(scooter.id);
+            
+            // Setup Map
+            const lat = scooter.latitude;
+            const lng = scooter.longitude;
+            
+            if (!map) {
+                map = L.map('map').setView([lat, lng], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+            } else {
+                map.setView([lat, lng], 15);
+                marker.setLatLng([lat, lng]);
+            }
+        }
+        document.getElementById('batterySlider').oninput = (e) => {
+            document.getElementById('batteryVal').innerText = e.target.value + '%';
+        };
+        document.getElementById('updateBtn').onclick = async () => {
+            if (!selectedScooter) return;
+            
+            const pos = marker.getLatLng();
+            const battery = parseInt(document.getElementById('batterySlider').value);
+            const statusDiv = document.getElementById('status');
+            
+            statusDiv.innerText = "Sending...";
+            statusDiv.className = "status";
+            const { error } = await supabase
+                .from('scooters')
+                .update({ 
+                    latitude: pos.lat, 
+                    longitude: pos.lng,
+                    battery_level: battery
+                })
+                .eq('id', selectedScooter.id);
+            if (error) {
+                statusDiv.innerText = "Error: " + error.message;
+                statusDiv.className = "status error";
+            } else {
+                statusDiv.innerText = "Signal Sent Successfully!";
+                statusDiv.className = "status success";
+                setTimeout(() => { statusDiv.innerText = ""; }, 3000);
+            }
+        };
+        loadScooters();
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "lemon-scooter-simulator",
+  "version": "1.0.0",
+  "description": "A simulator for Lemon scooters",
+  "main": "scootersim.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1"
+  }
+}
