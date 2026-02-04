@@ -24,6 +24,9 @@ struct ScanningView: View {
             // Camera Layer
             if !isProcessing {
                 QRScannerView(isScanning: $isScanning) { code in
+                    // Synchronous lock to prevent multiple Task triggers
+                    guard !isProcessing else { return }
+                    
                     print("Scanned code: \(code)")
                     
                     // Logic fault check: Prevent scanning of duplicate IDs in the same session
@@ -33,7 +36,7 @@ struct ScanningView: View {
                         return
                     }
                     
-                    withAnimation { isProcessing = true }
+                    isProcessing = true
                     
                     Task {
                         do {
