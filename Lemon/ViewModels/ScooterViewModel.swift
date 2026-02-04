@@ -46,8 +46,9 @@ class ScooterViewModel: ObservableObject {
     private func setupRealtimeSubscription() {
         ScooterService.shared.subscribeToScooters { [weak self] updatedScooters in
             DispatchQueue.main.async {
-                self?.scooters = updatedScooters
-                print("Realtime: ✅ Updated UI with \(updatedScooters.count) scooters")
+                // Only show scooters that are locked (available for rent)
+                self?.scooters = updatedScooters.filter { $0.isLocked == true && $0.isAvailable != false }
+                print("Realtime: ✅ Updated UI with \(self?.scooters.count ?? 0) available scooters")
             }
         }
     }

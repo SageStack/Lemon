@@ -98,27 +98,53 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, 50)
                 
-                // Magic Link Button
-                Button(action: {
-                    Task {
-                        await authViewModel.signInWithMagicLink(email: email)
+                // Social Login Buttons
+                VStack(spacing: 12) {
+                    Button(action: {
+                        Task {
+                            await authViewModel.signInWithGoogle()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "g.circle.fill") // Placeholder, ideally use asset
+                                .font(.system(size: 20))
+                            Text("SIGN IN WITH GOOGLE")
+                                .font(.system(size: 14, weight: .bold))
+                                .tracking(1)
+                        }
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.white)
+                        .cornerRadius(12)
                     }
-                }) {
-                    Text("SEND MAGIC LINK")
-                        .font(.system(size: 14, weight: .black))
-                        .tracking(1)
+                    
+                    Button(action: {
+                        Task {
+                             authViewModel.signInWithApple()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                                .font(.system(size: 20))
+                                .padding(.bottom, 2)
+                            Text("SIGN IN WITH APPLE")
+                                .font(.system(size: 14, weight: .bold))
+                                .tracking(1)
+                        }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(Color.white.opacity(0.05))
+                        .background(Color.black)
                         .cornerRadius(12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
                         )
+                    }
                 }
                 .padding(.horizontal, 30)
-                .disabled(authViewModel.isLoading || email.isEmpty)
+                .disabled(authViewModel.isLoading)
                 
                 // Signup Toggle
                 Button(action: {

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lemon Scooter Simulator (Live)</title>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Leaflet Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --lemon-primary: #D4FF00;
+            --bg-dark: #0A0A0A;
+            --card-bg: #1A1A1A;
+            --text-main: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --accent-glow: rgba(212, 255, 0, 0.2);
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: var(--lemon-primary);
+            text-align: center;
+            font-style: italic;
+            font-weight: 900;
+            letter-spacing: 4px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+        .card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid #333;
+            transition: transform 0.3s ease;
+        }
+        .card:hover { transform: translateY(-3px); }
+        .label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        select, input, button {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border-radius: 12px;
+            border: 1px solid #444;
+            background: #2A2A2A;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+        select:focus, input:focus { border-color: var(--lemon-primary); }
+        button {
+            background: var(--lemon-primary);
+            color: black;
+            font-weight: 800;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+        }
+        button:hover { background: #e5ff00; scale: 1.02; }
+        #map { height: 300px; border-radius: 16px; margin: 15px 0; border: 1px solid #333; }
+        .qr-section { display: flex; flex-direction: column; align-items: center; background: white; padding: 24px; border-radius: 20px; margin-top: 20px; }
+        #qrcode { margin-bottom: 10px; }
+        .scooter-id-text { color: black; font-family: monospace; font-size: 12px; font-weight: bold; }
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
+        .locked { background: #333; color: white; }
+        .unlocked { background: var(--lemon-primary); color: black; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .slider-container { display: flex; align-items: center; gap: 15px; }
+        input[type="range"] { flex: 1; }
+        .val-display { min-width: 45px; font-weight: bold; color: var(--lemon-primary); }
+        #log { text-align: center; font-size: 12px; margin-top: 15px; color: var(--text-secondary); font-family: monospace; }
+        #errorMessage { color: #ff4444; font-size: 12px; margin-top: 10px; text-align: center; display: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LEMON SIM</h1>
+        
+        <div class="card">
+            <div class="label">Scooter Fleet</div>
+            <select id="scooterSelect">
+                <option value="">Initializing...</option>
+            </select>
+            <div id="errorMessage"></div>
+            
+            <div id="controls" style="display:none">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div id="scooterStatus" class="status-badge locked">LOCKED</div>
+                    <div id="lastSeen" style="font-size: 10px; color: var(--text-secondary)"></div>
+                </div>
+
+                <div class="grid-2">
+                    <div>
+                        <div class="label">Battery (%)</div>
+                        <div class="slider-container">
+                            <input type="range" id="batterySlider" min="0" max="100" value="100">
+                            <span class="val-display" id="batteryVal">100%</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="label">Pings (sec)</div>
+                        <div class="slider-container">
+                            <input type="range" id="freqSlider" min="1" max="60" value="3">
+                            <span class="val-display" id="freqVal">3s</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="label" style="margin-top: 20px;">Position (Drag Pin)</div>
+                <div id="map"></div>
+                
+                <button id="updateBtn">Broadcast Position</button>
+            </div>
+            <div id="log">📡 Initializing connection...</div>
+        </div>
+
+        <div class="card" id="qrCard" style="display:none; text-align: center;">
+            <div class="label">Scan to Unlock</div>
+            <div class="qr-section">
+                <div id="qrcode"></div>
+                <div class="scooter-id-text" id="scooterIdLabel"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const firebaseConfig = {
+            projectId: "lemon-app-final-prod-1",
+            apiKey: "AIzaSyALC-IUzeLdD-lrTHPjZH2VBVIM-L_Xy4U",
+            databaseURL: "https://lemon-app-final-prod-1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        };
+
+        // --- Global State ---
+        let selectedScooterId = null;
+        let map = null;
+        let marker = null;
+        let heartbeatInterval = null;
+        const qrcode = new QRCode(document.getElementById("qrcode"), { width: 180, height: 180 });
+
+        // --- Helpers ---
+        function status(msg, isError = false) {
+            const logDiv = document.getElementById('log');
+            const errDiv = document.getElementById('errorMessage');
+            if (isError) {
+                errDiv.innerText = msg;
+                errDiv.style.display = 'block';
+                logDiv.innerText = "❌ Connection Failed";
+            } else {
+                logDiv.innerText = msg;
+            }
+        }
+
+        // --- Firebase Logic ---
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Monitor connection
+        db.ref(".info/connected").on("value", snap => {
+            if (snap.val() === true) {
+                status("📡 Signal Established (Connected)");
+                document.getElementById('errorMessage').style.display = 'none';
+            } else {
+                status("📡 Searching for Signal... (Disconnected)");
+            }
+        });
+
+        // Initialize Fleet
+        async function initFleet() {
+            const ref = db.ref('scooters');
+            const timeout = setTimeout(() => {
+                status("⚠️ Connection timeout. Check your Database Rules and URL.", true);
+            }, 8000);
+
+            ref.once('value', snapshot => {
+                clearTimeout(timeout);
+                if (!snapshot.exists()) {
+                    status("🆕 Creating default fleet...");
+                    ref.set({
+                        "scooter_001": { name: "Lemon Pro #001", latitude: 6.9271, longitude: 79.8430, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
+                        "scooter_042": { name: "Lemon Lite #042", latitude: 6.9065, longitude: 79.8640, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
+                        "scooter_999": { name: "Lemon Max #999", latitude: 6.8920, longitude: 79.8510, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() }
+                    }).catch(e => status("❌ Write Error: " + e.message, true));
+                }
+                loadFleetDropdown();
+            }, e => status("❌ Read Error: " + e.message, true));
+        }
+
+        function loadFleetDropdown() {
+            db.ref('scooters').on('value', snapshot => {
+                const select = document.getElementById('scooterSelect');
+                const prev = select.value;
+                select.innerHTML = '<option value="">Select a vehicle...</option>';
+                snapshot.forEach(child => {
+                    const data = child.val();
+                    const opt = document.createElement('option');
+                    opt.value = child.key;
+                    opt.textContent = (data.name || child.key) + (data.is_locked ? ' (Locked)' : ' (UNLOCKED)');
+                    select.appendChild(opt);
+                });
+                if (prev) select.value = prev;
+            });
+        }
+
+        async function selectScooter(id) {
+            if (!id) {
+                document.getElementById('controls').style.display = 'none';
+                document.getElementById('qrCard').style.display = 'none';
+                return;
+            }
+            selectedScooterId = id;
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('qrCard').style.display = 'block';
+            document.getElementById('scooterIdLabel').innerText = id;
+            qrcode.clear();
+            qrcode.makeCode(id);
+
+            db.ref('scooters/' + id).on('value', snapshot => {
+                const data = snapshot.val();
+                if (!data) return;
+                
+                // Status Badge
+                const badge = document.getElementById('scooterStatus');
+                const wasLocked = badge.innerText === "LOCKED";
+                const isLocked = data.is_locked;
+                
+                badge.innerText = isLocked ? "LOCKED" : "UNLOCKED";
+                badge.className = "status-badge " + (isLocked ? "locked" : "unlocked");
+                
+                // Visual feedback on unlock
+                if (wasLocked && !isLocked) {
+                    badge.style.transform = "scale(1.2)";
+                    setTimeout(() => badge.style.transform = "scale(1)", 200);
+                    status("🔓 Vehicle Unlocked via QR!");
+                }
+                
+                // Timestamp
+                if (data.last_updated) {
+                    document.getElementById('lastSeen').innerText = "Last Ping: " + new Date(data.last_updated).toLocaleTimeString();
+                }
+
+                // Map & Marker logic
+                const latlng = [data.latitude, data.longitude];
+                if (!map) {
+                    map = L.map('map').setView(latlng, 16);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+                    marker = L.marker(latlng, {
+                        draggable: true,
+                        icon: L.divIcon({
+                            className: 'custom-div-icon',
+                            html: '<div style="background: #D4FF00; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px #D4FF00"></div>',
+                            iconAnchor: [6, 6]
+                        })
+                    }).addTo(map);
+                    document.getElementById('batterySlider').value = data.battery_percentage;
+                    document.getElementById('batteryVal').innerText = data.battery_percentage + "%";
+                } else {
+                    // Update map and marker if they already exist
+                    map.panTo(latlng);
+                    marker.setLatLng(latlng);
+                }
+            });
+            startHeartbeat();
+        }
+
+        function startHeartbeat() {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            const run = async () => {
+                if (!selectedScooterId || !marker) return;
+                const pos = marker.getLatLng();
+                const bat = parseInt(document.getElementById('batterySlider').value);
+                db.ref('scooters/' + selectedScooterId).update({
+                    latitude: pos.lat,
+                    longitude: pos.lng,
+                    battery_percentage: bat,
+                    last_updated: Date.now()
+                }).catch(e => console.error("Update failed", e));
+            };
+            const sec = parseInt(document.getElementById('freqSlider').value);
+            heartbeatInterval = setInterval(run, sec * 1000);
+            run();
+        }
+
+        // --- Events ---
+        document.getElementById('scooterSelect').onchange = e => selectScooter(e.target.value);
+        document.getElementById('batterySlider').oninput = e => document.getElementById('batteryVal').innerText = e.target.value + "%";
+        document.getElementById('freqSlider').oninput = e => {
+            document.getElementById('freqVal').innerText = e.target.value + "s";
+            startHeartbeat();
+        };
+        document.getElementById('updateBtn').onclick = () => { status("📡 Manual broadcast sent"); startHeartbeat(); };
+
+        initFleet();
+    </script>
+</body>
+</html>

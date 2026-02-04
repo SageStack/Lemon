@@ -11,21 +11,56 @@ import AVFoundation
 struct ScanningView: View {
     @Binding var isScanning: Bool
     @Binding var isActiveRide: Bool
+    @Binding var activeScooterIds: [String]
     @State private var scanProgress: CGFloat = 0
     @State private var showingError = false
+    @State private var errorMessage = ""
+    @State private var isProcessing = false
     
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
             // Camera Layer
-            QRScannerView(isScanning: $isScanning) { code in
-                print("Scanned code: \(code)")
-                // In a real app, validate the code here
-                isActiveRide = true
-                isScanning = false
+            if !isProcessing {
+                QRScannerView(isScanning: $isScanning) { code in
+                    print("Scanned code: \(code)")
+                    
+                    // Logic fault check: Prevent scanning of duplicate IDs in the same session
+                    if activeScooterIds.contains(code) {
+                        errorMessage = "Scooter already added to ride."
+                        showingError = true
+                        return
+                    }
+                    
+                    withAnimation { isProcessing = true }
+                    
+                    Task {
+                        do {
+                            // In a real app, we'd fetch the scooter first to check is_locked
+                            // But for this simulation, we'll try to unlock it.
+                            try await ScooterService.shared.unlockScooter(id: code)
+                            
+                            await MainActor.run {
+                                withAnimation {
+                                    activeScooterIds.append(code)
+                                    isActiveRide = true
+                                    isScanning = false
+                                    isProcessing = false
+                                }
+                            }
+                        } catch {
+                            print("Unlock failed: \(error.localizedDescription)")
+                            await MainActor.run {
+                                errorMessage = "Unlock failed. Please try again."
+                                showingError = true
+                                isProcessing = false
+                            }
+                        }
+                    }
+                }
+                .ignoresSafeArea()
             }
-            .ignoresSafeArea()
             
             // UI Overlay
             VStack(spacing: 40) {
@@ -41,7 +76,7 @@ struct ScanningView: View {
                 }
                 .padding()
                 
-                Text("SCAN QR CODE")
+                Text(isProcessing ? "UNLOCKING..." : "SCAN QR CODE")
                     .font(.system(size: 20, weight: .black, design: .monospaced))
                     .foregroundColor(.lemonPrimary)
                     .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
@@ -54,20 +89,26 @@ struct ScanningView: View {
                         .stroke(Color.lemonPrimary, lineWidth: 2)
                         .frame(width: 250, height: 250)
                     
-                    // Scanning Line
-                    Rectangle()
-                        .fill(LinearGradient(colors: [.clear, .lemonPrimary, .clear], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 230, height: 2)
-                        .offset(y: scanProgress)
-                        .onAppear {
-                            withAnimation(.linear(duration: 2).repeatForever(autoreverses: true)) {
-                                scanProgress = 100
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .lemonPrimary))
+                            .scaleEffect(2)
+                    } else {
+                        // Scanning Line
+                        Rectangle()
+                            .fill(LinearGradient(colors: [.clear, .lemonPrimary, .clear], startPoint: .top, endPoint: .bottom))
+                            .frame(width: 230, height: 2)
+                            .offset(y: scanProgress)
+                            .onAppear {
+                                withAnimation(.linear(duration: 2).repeatForever(autoreverses: true)) {
+                                    scanProgress = 100
+                                }
                             }
-                        }
+                    }
                 }
                 .frame(width: 250, height: 250)
                 
-                Text("Center the QR code on the scooter within the frame")
+                Text(isProcessing ? "Verifying scooter..." : "Center the QR code on the scooter within the frame")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
@@ -77,18 +118,25 @@ struct ScanningView: View {
                 Spacer()
                 
                 // Flashlight Button (Optional enhancement)
-                Button(action: {
-                    toggleTorch()
-                }) {
-                    Image(systemName: "flashlight.on.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.white)
-                        .padding(20)
-                        .background(Color.white.opacity(0.2))
-                        .clipShape(Circle())
+                if !isProcessing {
+                    Button(action: {
+                        toggleTorch()
+                    }) {
+                        Image(systemName: "flashlight.on.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .padding(20)
+                            .background(Color.white.opacity(0.2))
+                            .clipShape(Circle())
+                    }
+                    .padding(.bottom, 50)
                 }
-                .padding(.bottom, 50)
             }
+        }
+        .alert("Status", isPresented: $showingError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage)
         }
     }
     

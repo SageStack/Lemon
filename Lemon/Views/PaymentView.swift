@@ -10,6 +10,9 @@ import SwiftUI
 struct PaymentView: View {
     @Environment(\.dismiss) var dismiss
     
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    
     var body: some View {
         ZStack {
             Color.lemonBackground.ignoresSafeArea()
@@ -53,8 +56,19 @@ struct PaymentView: View {
                     .cornerRadius(25)
                     
                     HStack(spacing: 15) {
-                        PaymentActionButton(title: "TOP UP", icon: "plus.circle.fill")
-                        PaymentActionButton(title: "PROMO", icon: "tag.fill")
+                        Button(action: {
+                            alertMessage = "Top Up functionality coming soon."
+                            showAlert = true
+                        }) {
+                            PaymentActionButton(title: "TOP UP", icon: "plus.circle.fill")
+                        }
+                        
+                        Button(action: {
+                            alertMessage = "Promo offers coming soon."
+                            showAlert = true
+                        }) {
+                            PaymentActionButton(title: "PROMO", icon: "tag.fill")
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -90,7 +104,10 @@ struct PaymentView: View {
                     HStack {
                         TextField("ENTER CODE", text: .constant(""))
                             .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        Button(action: {}) {
+                        Button(action: {
+                            alertMessage = "Invalid promo code."
+                            showAlert = true
+                        }) {
                             Text("APPLY")
                                 .font(.system(size: 12, weight: .black))
                                 .foregroundColor(.black)
@@ -108,6 +125,11 @@ struct PaymentView: View {
                 
                 Spacer()
             }
+        }
+        .alert("Lemon", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
         }
     }
 }

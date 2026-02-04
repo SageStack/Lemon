@@ -11,9 +11,18 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     
+    @State private var activeSheet: SettingsDestination?
+    @State private var alertMessage: String?
+    @State private var showAlert = false
+    
     @State private var notificationsEnabled = true
     @State private var locationEnabled = true
     @State private var promoEmailsEnabled = false
+    
+    enum SettingsDestination: Identifiable {
+        case profile, payment, support
+        var id: Self { self }
+    }
     
     var body: some View {
         ZStack {
@@ -49,13 +58,14 @@ struct SettingsView: View {
                         SettingsSection(title: "ACCOUNT") {
                             VStack(spacing: 1) {
                                 SettingsRow(title: "Edit Profile", icon: "person.fill", showChevron: true) {
-                                    // Navigate to edit profile
+                                    activeSheet = .profile
                                 }
                                 SettingsRow(title: "Payment Methods", icon: "creditcard.fill", showChevron: true) {
-                                    // Navigate to payments
+                                    activeSheet = .payment
                                 }
                                 SettingsRow(title: "Change Password", icon: "lock.fill", showChevron: true) {
-                                    // Navigate to change password
+                                    alertMessage = "Password change functionality is coming soon."
+                                    showAlert = true
                                 }
                             }
                             .background(Color.white.opacity(0.05))
@@ -76,9 +86,17 @@ struct SettingsView: View {
                         // Support Section
                         SettingsSection(title: "SUPPORT & LEGAL") {
                             VStack(spacing: 1) {
-                                SettingsRow(title: "Help Center", icon: "questionmark.circle.fill", showChevron: true) {}
-                                SettingsRow(title: "Privacy Policy", icon: "hand.raised.fill", showChevron: true) {}
-                                SettingsRow(title: "Terms of Service", icon: "doc.text.fill", showChevron: true) {}
+                                SettingsRow(title: "Help Center", icon: "questionmark.circle.fill", showChevron: true) {
+                                    activeSheet = .support
+                                }
+                                SettingsRow(title: "Privacy Policy", icon: "hand.raised.fill", showChevron: true) {
+                                    alertMessage = "Privacy Policy is not yet available."
+                                    showAlert = true
+                                }
+                                SettingsRow(title: "Terms of Service", icon: "doc.text.fill", showChevron: true) {
+                                    alertMessage = "Terms of Service are not yet available."
+                                    showAlert = true
+                                }
                             }
                             .background(Color.white.opacity(0.05))
                             .cornerRadius(15)
@@ -117,6 +135,21 @@ struct SettingsView: View {
                     .padding(.horizontal)
                 }
             }
+        }
+        .sheet(item: $activeSheet) { item in
+            switch item {
+            case .profile:
+                ProfileView()
+            case .payment:
+                PaymentView()
+            case .support:
+                SupportView()
+            }
+        }
+        .alert("Coming Soon", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage ?? "")
         }
     }
 }

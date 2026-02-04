@@ -85,19 +85,27 @@ class QRScannerViewController: UIViewController {
         // For robustnes: We'll dispatch to sessionQueue to check and add.
         
         CameraManager.shared.sessionQueue.async {
-            // Check if output exists inside the queue to be thread safe with session modifications
-            if !session.outputs.contains(where: { $0 is AVCaptureMetadataOutput }) {
-                session.beginConfiguration()
-                let metadataOutput = AVCaptureMetadataOutput()
+            session.beginConfiguration()
+            
+            let metadataOutput: AVCaptureMetadataOutput
+            if let existingOutput = session.outputs.first(where: { $0 is AVCaptureMetadataOutput }) as? AVCaptureMetadataOutput {
+                metadataOutput = existingOutput
+            } else {
+                metadataOutput = AVCaptureMetadataOutput()
                 if session.canAddOutput(metadataOutput) {
                     session.addOutput(metadataOutput)
-                    if let metaDelegate = metaDelegate {
-                        metadataOutput.setMetadataObjectsDelegate(metaDelegate, queue: DispatchQueue.main)
-                        metadataOutput.metadataObjectTypes = [.qr]
-                    }
+                } else {
+                    session.commitConfiguration()
+                    return
                 }
-                session.commitConfiguration()
             }
+            
+            if let metaDelegate = metaDelegate {
+                metadataOutput.setMetadataObjectsDelegate(metaDelegate, queue: DispatchQueue.main)
+                metadataOutput.metadataObjectTypes = [.qr]
+            }
+            
+            session.commitConfiguration()
         }
         
         previewLayer = AVCaptureVideoPreviewLayer(session: session)

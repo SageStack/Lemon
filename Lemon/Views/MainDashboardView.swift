@@ -15,6 +15,7 @@ struct MainDashboardView: View {
     @State private var selectedMenuItem: MenuItem?
     @State private var isScanning = false
     @State private var isActiveRide = false
+    @State private var activeScooterIds: [String] = []
     @State private var reservedScooter: Scooter?
     @State private var isReserved = false
     @State private var isShowingParkingVerification = false
@@ -217,10 +218,10 @@ struct MainDashboardView: View {
             }
         }
         .fullScreenCover(isPresented: $isScanning) {
-            ScanningView(isScanning: $isScanning, isActiveRide: $isActiveRide)
+            ScanningView(isScanning: $isScanning, isActiveRide: $isActiveRide, activeScooterIds: $activeScooterIds)
         }
         .fullScreenCover(isPresented: $isShowingParkingVerification) {
-            ParkingVerificationView(isVisible: $isShowingParkingVerification, isActiveRide: $isActiveRide)
+            ParkingVerificationView(isVisible: $isShowingParkingVerification, isActiveRide: $isActiveRide, scooterIds: activeScooterIds)
         }
         .sheet(isPresented: $isShowingGroupRideSelection) {
             GroupRideSelectionView(isPresented: $isShowingGroupRideSelection) {
@@ -233,8 +234,11 @@ struct MainDashboardView: View {
             .presentationDetents([.height(350)])
         }
         .onChange(of: isActiveRide) { old, new in
-            if !new && lastTripData != nil {
-                showTripSummary = true
+            if !new {
+                activeScooterIds.removeAll()
+                if lastTripData != nil {
+                    showTripSummary = true
+                }
             }
         }
         .task {

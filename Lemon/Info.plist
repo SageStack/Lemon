@@ -14,6 +14,15 @@
 				<string>lemonapp</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- REPLACE THIS WITH YOUR REVERSED CLIENT ID FROM GOOGLESERVICE-INFO.PLIST -->
+				<string>com.googleusercontent.apps.22651612800-ca1t34r89u9fvq603ougul3vcm88igrq</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lemon needs your location to find nearby scooters and show them on the map.</string>

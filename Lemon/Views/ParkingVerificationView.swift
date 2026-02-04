@@ -4,9 +4,17 @@ import AVFoundation
 struct ParkingVerificationView: View {
     @Binding var isVisible: Bool
     @Binding var isActiveRide: Bool
+    let scooterIds: [String]
+    
+    @State private var currentScooterIndex = 0
     @State private var isCaptured = false
     @State private var shutterEffect = false
     @State private var sessionRunning = true
+    
+    // Logic fault: Check for empty IDs
+    private var isLastScooter: Bool {
+        currentScooterIndex >= scooterIds.count - 1
+    }
     
     var body: some View {
         ZStack {
@@ -26,11 +34,19 @@ struct ParkingVerificationView: View {
                 }
                 .padding()
                 
-                Text(isCaptured ? "PHOTO CAPTURED" : "PARKING VERIFICATION")
-                    .font(.system(size: 20, weight: .black, design: .monospaced))
-                    .foregroundColor(.lemonPrimary)
+                VStack(spacing: 8) {
+                    Text(isCaptured ? "PHOTO CAPTURED" : "PARKING VERIFICATION")
+                        .font(.system(size: 20, weight: .black, design: .monospaced))
+                        .foregroundColor(.lemonPrimary)
+                    
+                    if scooterIds.count > 1 {
+                        Text("Scooter \(currentScooterIndex + 1) of \(scooterIds.count)")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
                 
-                Text("Please take a photo of the scooter parked correctly to end your ride.")
+                Text(isCaptured ? "Great! Move to the next one or finish." : "Please take a photo of scooter \(scooterIds.count > 0 ? (scooterIds[safe: currentScooterIndex] ?? "selected") : "selected") parked correctly.")
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -40,7 +56,6 @@ struct ParkingVerificationView: View {
                 
                 // Camera Viewfinder
                 ZStack {
-                    // Real Camera Preview
                     CameraCaptureView(isSessionRunning: $sessionRunning)
                         .frame(maxWidth: .infinity)
                         .aspectRatio(3/4, contentMode: .fit)
@@ -50,7 +65,6 @@ struct ParkingVerificationView: View {
                                 .stroke(Color.white.opacity(0.2), lineWidth: 2)
                         )
                     
-                    // Shutter Effect
                     if shutterEffect {
                         Color.white
                             .cornerRadius(20)
@@ -58,7 +72,6 @@ struct ParkingVerificationView: View {
                     }
                     
                     if isCaptured {
-                        // Success Overlay
                         ZStack {
                             Color.black.opacity(0.4)
                             Image(systemName: "checkmark.circle.fill")
@@ -74,21 +87,49 @@ struct ParkingVerificationView: View {
                 Spacer()
                 
                 if isCaptured {
-                    Button(action: {
-                        withAnimation {
-                            isActiveRide = false
-                            isVisible = false
+                    if isLastScooter {
+                        Button(action: {
+                            Task {
+                                do {
+                                    try await ScooterService.shared.lockScooters(ids: scooterIds)
+                                    await MainActor.run {
+                                        withAnimation {
+                                            isActiveRide = false
+                                            isVisible = false
+                                        }
+                                    }
+                                } catch {
+                                    print("Lock failed: \(error)")
+                                }
+                            }
+                        }) {
+                            Text("FINISH RIDE")
+                                .font(.system(size: 18, weight: .black))
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 60)
+                                .background(Color.lemonPrimary)
+                                .cornerRadius(15)
                         }
-                    }) {
-                        Text("FINISH RIDE")
-                            .font(.system(size: 18, weight: .black))
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 60)
-                            .background(Color.lemonPrimary)
-                            .cornerRadius(15)
+                        .padding(.horizontal, 30)
+                    } else {
+                        Button(action: {
+                            withAnimation {
+                                currentScooterIndex += 1
+                                isCaptured = false
+                                sessionRunning = true
+                            }
+                        }) {
+                            Text("NEXT SCOOTER")
+                                .font(.system(size: 18, weight: .black))
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 60)
+                                .background(Color.white)
+                                .cornerRadius(15)
+                        }
+                        .padding(.horizontal, 30)
                     }
-                    .padding(.horizontal, 30)
                 } else {
                     Button(action: {
                         capturePhoto()
@@ -113,7 +154,6 @@ struct ParkingVerificationView: View {
     }
     
     private func capturePhoto() {
-        // Trigger shutter effect
         withAnimation(.easeInOut(duration: 0.1)) {
             shutterEffect = true
         }
@@ -123,12 +163,18 @@ struct ParkingVerificationView: View {
                 shutterEffect = false
             }
             
-            // Mock capture success
             AudioServicesPlaySystemSound(1108) // Shutter sound
             withAnimation(.spring()) {
                 isCaptured = true
-                sessionRunning = false // Stop session to save battery/power
+                sessionRunning = false
             }
         }
+    }
+}
+
+// Helper extension for safe array indexing
+extension Array {
+    subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }

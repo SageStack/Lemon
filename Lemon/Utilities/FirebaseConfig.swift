@@ -9,6 +9,7 @@ import Foundation
 import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseDatabase
 
 class FirebaseManager {
     static let shared = FirebaseManager()
@@ -26,6 +27,10 @@ class FirebaseManager {
     
     var db: Firestore {
         Firestore.firestore()
+    }
+    
+    var rtdb: DatabaseReference {
+        Database.database().reference()
     }
     
     // Future: Add Storage or Functions if needed

@@ -6,66 +6,116 @@
 //
 
 import Foundation
-import FirebaseFirestore
+import FirebaseDatabase
 
 class ScooterService {
     static let shared = ScooterService()
     
-    private let db = FirebaseManager.shared.db
-    private var listener: ListenerRegistration?
+    private let db = Database.database().reference()
+    private var ref: DatabaseReference?
+    private var handle: DatabaseHandle?
     
     func fetchScooters() async throws -> [Scooter] {
-        let snapshot = try await db.collection("scooters").getDocuments()
-        let scooters = try snapshot.documents.compactMap { document -> Scooter? in
-            // Map Firestore data to Scooter model
-            // Firestore data is typically [String: Any]
-            // We can use Codable support if we configure it correctly
-            var data = document.data()
-            // Ensure ID is set correctly (Firestore doc ID or field)
-            if data["id"] == nil {
-                data["id"] = document.documentID
+        return try await withCheckedThrowingContinuation { continuation in
+            db.child("scooters").observeSingleEvent(of: .value) { [weak self] snapshot in
+                guard let self = self else { return }
+                let scooters = snapshot.children.compactMap { child -> Scooter? in
+                    guard let childSnap = child as? DataSnapshot,
+                          let value = childSnap.value as? [String: Any] else { return nil }
+                    
+                    var data = value
+                    if data["id"] == nil {
+                        data["id"] = childSnap.key
+                    }
+                    
+                    do {
+                        let jsonData = try JSONSerialization.data(withJSONObject: data)
+                        return try self.decoder.decode(Scooter.self, from: jsonData)
+                    } catch {
+                        print("Decoding error: \(error)")
+                        return nil
+                    }
+                }
+                continuation.resume(returning: scooters)
+            } withCancel: { error in
+                continuation.resume(throwing: error)
             }
-            
-            // Manual decoding helper or json-based decoding
-            let jsonData = try JSONSerialization.data(withJSONObject: data)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601 // Or however Firestore stores it
-            return try decoder.decode(Scooter.self, from: jsonData)
         }
-        
-        return scooters
     }
     
     func subscribeToScooters(onChange: @escaping ([Scooter]) -> Void) {
-        listener = db.collection("scooters").addSnapshotListener { querySnapshot, error in
-            guard let documents = querySnapshot?.documents else {
-                print("Realtime: ❌ Error fetching snapshots: \(error?.localizedDescription ?? "Unknown error")")
-                return
-            }
-            
-            let scooters = documents.compactMap { document -> Scooter? in
-                var data = document.data()
+        handle = db.child("scooters").observe(.value) { [weak self] snapshot in
+            guard let self = self else { return }
+            let scooters = snapshot.children.compactMap { child -> Scooter? in
+                guard let childSnap = child as? DataSnapshot,
+                      let value = childSnap.value as? [String: Any] else { return nil }
+                
+                var data = value
                 if data["id"] == nil {
-                    data["id"] = document.documentID
+                    data["id"] = childSnap.key
                 }
                 
                 do {
                     let jsonData = try JSONSerialization.data(withJSONObject: data)
-                    let decoder = JSONDecoder()
-                    // Customize decoder for Firestore timestamps if needed
-                    return try decoder.decode(Scooter.self, from: jsonData)
+                    return try self.decoder.decode(Scooter.self, from: jsonData)
                 } catch {
-                    print("Realtime: ❌ Decoding error: \(error)")
                     return nil
                 }
             }
-            
-            print("Realtime: ✅ Snapshot received: \(scooters.count) scooters")
             onChange(scooters)
         }
     }
     
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        // RTDB date handling: assume milliseconds since 1970
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let milliseconds = try container.decode(Double.self)
+            return Date(timeIntervalSince1970: milliseconds / 1000.0)
+        }
+        return d
+    }()
+    
     func unsubscribe() {
-        listener?.remove()
+        if let handle = handle {
+            db.child("scooters").removeObserver(withHandle: handle)
+        }
+    }
+    
+    // MARK: - Remote Commands
+    
+    func unlockScooter(id: String) async throws {
+        try await db.child("scooters").child(id).updateChildValues([
+            "is_locked": false,
+            "last_updated": ServerValue.timestamp()
+        ])
+    }
+    
+    func lockScooter(id: String) async throws {
+        try await db.child("scooters").child(id).updateChildValues([
+            "is_locked": true,
+            "last_updated": ServerValue.timestamp()
+        ])
+    }
+    
+    func unlockScooters(ids: [String]) async throws {
+        var updates: [String: Any] = [:]
+        let timestamp = ServerValue.timestamp()
+        for id in ids {
+            updates["scooters/\(id)/is_locked"] = false
+            updates["scooters/\(id)/last_updated"] = timestamp
+        }
+        try await db.updateChildValues(updates)
+    }
+    
+    func lockScooters(ids: [String]) async throws {
+        var updates: [String: Any] = [:]
+        let timestamp = ServerValue.timestamp()
+        for id in ids {
+            updates["scooters/\(id)/is_locked"] = true
+            updates["scooters/\(id)/last_updated"] = timestamp
+        }
+        try await db.updateChildValues(updates)
     }
 }
