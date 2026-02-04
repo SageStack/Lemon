@@ -14,8 +14,9 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
     var latitude: Double
     var longitude: Double
     var batteryPercentage: Int?
-    var isLocked: Bool?
     var isAvailable: Bool?
+    var isLocked: Bool?
+    var reservedBy: String?
     var status: String?
     var lastUpdated: Date?
     
@@ -47,6 +48,7 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
         case batteryPercentage = "battery_percentage"
         case isLocked = "is_locked"
         case isAvailable = "is_available"
+        case reservedBy = "reserved_by"
         case status
         case lastUpdated = "last_updated"
     }

@@ -9,9 +9,21 @@ import SwiftUI
 import Combine
 
 class ScooterViewModel: ObservableObject {
+    /// The full list of scooters (unfiltered) for data lookup and active rides
     @Published var scooters: [Scooter] = []
+    
+    /// Only scooters that are available to be rented (shown on the map)
+    @Published var availableScooters: [Scooter] = []
+    
     @Published var isLoading = false
     @Published var errorMessage: String?
+    
+    var currentUserId: String? {
+        didSet {
+            // Re-filter when user changes
+            updateScooterList(scooters)
+        }
+    }
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -30,13 +42,13 @@ class ScooterViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            // Initial fetch
-            self.scooters = try await ScooterService.shared.fetchScooters()
-            // Setup real-time listener
+            let fetched = try await ScooterService.shared.fetchScooters()
+            updateScooterList(fetched)
             setupRealtimeSubscription()
         } catch {
             self.errorMessage = "Unable to fetch scooter data."
             self.scooters = []
+            self.availableScooters = []
         }
         
         isLoading = false
@@ -45,11 +57,32 @@ class ScooterViewModel: ObservableObject {
     @MainActor
     private func setupRealtimeSubscription() {
         ScooterService.shared.subscribeToScooters { [weak self] updatedScooters in
-            DispatchQueue.main.async {
-                // Only show scooters that are locked (available for rent)
-                self?.scooters = updatedScooters.filter { $0.isLocked == true && $0.isAvailable != false }
-                print("Realtime: ✅ Updated UI with \(self?.scooters.count ?? 0) available scooters")
-            }
+            self?.updateScooterList(updatedScooters)
+        }
+    }
+
+    @MainActor
+    private func updateScooterList(_ allScooters: [Scooter]) {
+        // 1. Maintain the full list for context
+        self.scooters = allScooters
+        
+        // 2. Filter for map availability:
+        // - Must be Locked
+        // - Must be Available
+        // - Must NOT be reserved OR be reserved by CURRENT user
+        let filtered = allScooters.filter { scooter in
+            let isLocked = scooter.isLocked ?? true
+            let isAvailable = scooter.isAvailable ?? true
+            let reservedBy = scooter.reservedBy
+            
+            let isReservedByOthers = reservedBy != nil && reservedBy != currentUserId
+            
+            return isLocked && isAvailable && !isReservedByOthers
+        }
+        
+        if self.availableScooters != filtered {
+            self.availableScooters = filtered
+            print("Realtime: ✅ Updated Map with \(filtered.count) scooters (Total in DB: \(allScooters.count))")
         }
     }
 }

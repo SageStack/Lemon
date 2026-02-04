@@ -37,8 +37,13 @@ struct ReservationView: View {
             
             HStack(spacing: 15) {
                 Button(action: {
-                    withAnimation {
-                        isReserved = false
+                    Task {
+                        try? await ScooterService.shared.cancelReservation(id: scooter.id)
+                        await MainActor.run {
+                            withAnimation {
+                                isReserved = false
+                            }
+                        }
                     }
                 }) {
                     Text("CANCEL")
@@ -51,7 +56,8 @@ struct ReservationView: View {
                 }
                 
                 Button(action: {
-                    // This would trigger the scan flow
+                    NotificationCenter.default.post(name: NSNotification.Name("UnlockScooter"), object: nil)
+                    isReserved = false
                 }) {
                     Text("UNLOCK")
                         .font(.system(size: 14, weight: .bold))
@@ -74,7 +80,12 @@ struct ReservationView: View {
             if timeRemaining > 0 {
                 timeRemaining -= 1
             } else {
-                isReserved = false
+                Task {
+                    try? await ScooterService.shared.cancelReservation(id: scooter.id)
+                    await MainActor.run {
+                        isReserved = false
+                    }
+                }
             }
         }
     }

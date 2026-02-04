@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct MainDashboardView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var locationManager = LocationManager()
     @StateObject private var scooterViewModel = ScooterViewModel()
     @State private var selectedScooter: Scooter?
@@ -33,7 +34,7 @@ struct MainDashboardView: View {
                     selectedScooter: $selectedScooter,
                     isGroupSelectionMode: $isGroupSelectionMode,
                     selectedGroupScooters: $selectedGroupScooters,
-                    scooters: scooterViewModel.scooters
+                    scooters: scooterViewModel.availableScooters
                 )
                     .ignoresSafeArea()
                     .safeAreaInset(edge: .bottom) {
@@ -168,11 +169,16 @@ struct MainDashboardView: View {
             }
             .blur(radius: isShowingSideMenu || isShowingGroupRideSelection ? 10 : 0)
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ReserveScooter"))) { notification in
-                if let scooter = notification.object as? Scooter {
-                    withAnimation {
-                        reservedScooter = scooter
-                        isReserved = true
-                        selectedScooter = nil // Hide card
+                if let scooter = notification.object as? Scooter, let userId = authViewModel.currentUser?.id {
+                    Task {
+                        try? await ScooterService.shared.reserveScooter(id: scooter.id, userId: userId)
+                        await MainActor.run {
+                            withAnimation {
+                                reservedScooter = scooter
+                                isReserved = true
+                                selectedScooter = nil // Hide card
+                            }
+                        }
                     }
                 }
             }
@@ -241,8 +247,14 @@ struct MainDashboardView: View {
                 }
             }
         }
-        .task {
-            await scooterViewModel.loadScooters()
+        .onAppear {
+            scooterViewModel.currentUserId = authViewModel.currentUser?.id
+            Task {
+                await scooterViewModel.loadScooters()
+            }
+        }
+        .onChange(of: authViewModel.currentUser?.id) { old, new in
+            scooterViewModel.currentUserId = new
         }
     }
 }

@@ -20,21 +20,8 @@ class ScooterService {
             db.child("scooters").observeSingleEvent(of: .value) { [weak self] snapshot in
                 guard let self = self else { return }
                 let scooters = snapshot.children.compactMap { child -> Scooter? in
-                    guard let childSnap = child as? DataSnapshot,
-                          let value = childSnap.value as? [String: Any] else { return nil }
-                    
-                    var data = value
-                    if data["id"] == nil {
-                        data["id"] = childSnap.key
-                    }
-                    
-                    do {
-                        let jsonData = try JSONSerialization.data(withJSONObject: data)
-                        return try self.decoder.decode(Scooter.self, from: jsonData)
-                    } catch {
-                        print("Decoding error: \(error)")
-                        return nil
-                    }
+                    guard let childSnap = child as? DataSnapshot else { return nil }
+                    return self.decodeScooter(from: childSnap)
                 }
                 continuation.resume(returning: scooters)
             } withCancel: { error in
@@ -47,22 +34,39 @@ class ScooterService {
         handle = db.child("scooters").observe(.value) { [weak self] snapshot in
             guard let self = self else { return }
             let scooters = snapshot.children.compactMap { child -> Scooter? in
-                guard let childSnap = child as? DataSnapshot,
-                      let value = childSnap.value as? [String: Any] else { return nil }
-                
-                var data = value
-                if data["id"] == nil {
-                    data["id"] = childSnap.key
-                }
-                
-                do {
-                    let jsonData = try JSONSerialization.data(withJSONObject: data)
-                    return try self.decoder.decode(Scooter.self, from: jsonData)
-                } catch {
-                    return nil
-                }
+                guard let childSnap = child as? DataSnapshot else { return nil }
+                return self.decodeScooter(from: childSnap)
             }
             onChange(scooters)
+        }
+    }
+
+    private func decodeScooter(from snapshot: DataSnapshot) -> Scooter? {
+        guard let value = snapshot.value as? [String: Any] else { return nil }
+        
+        var data = value
+        let scooterId = snapshot.key
+        if data["id"] == nil {
+            data["id"] = scooterId
+        }
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: data)
+            return try self.decoder.decode(Scooter.self, from: jsonData)
+        } catch {
+            print("Realtime: ❌ Error decoding scooter [\(scooterId)]: \(error.localizedDescription)")
+            // Detail the error if it's a data mismatch
+            if let decodingError = error as? DecodingError {
+                switch decodingError {
+                case .keyNotFound(let key, _):
+                    print("Realtime: ⚠️ Missing mandatory field: \(key.stringValue)")
+                case .typeMismatch(let type, let context):
+                    print("Realtime: ⚠️ Type mismatch for field \(context.codingPath.last?.stringValue ?? "unknown"): expected \(type)")
+                default:
+                    break
+                }
+            }
+            return nil
         }
     }
     
@@ -95,6 +99,20 @@ class ScooterService {
     func lockScooter(id: String) async throws {
         try await db.child("scooters").child(id).updateChildValues([
             "is_locked": true,
+            "last_updated": ServerValue.timestamp()
+        ])
+    }
+    
+    func reserveScooter(id: String, userId: String) async throws {
+        try await db.child("scooters").child(id).updateChildValues([
+            "reserved_by": userId,
+            "last_updated": ServerValue.timestamp()
+        ])
+    }
+    
+    func cancelReservation(id: String) async throws {
+        try await db.child("scooters").child(id).updateChildValues([
+            "reserved_by": NSNull(),
             "last_updated": ServerValue.timestamp()
         ])
     }
