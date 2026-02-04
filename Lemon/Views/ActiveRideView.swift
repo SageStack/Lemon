@@ -10,41 +10,48 @@ import Combine
 
 struct ActiveRideView: View {
     @Binding var isActive: Bool
+    let scooterIds: [String]
+    let allScooters: [Scooter]
+    
     @State private var rideDuration = 0
     @State private var rideCost: Double = 0.0
-    @State private var activeScooters: [ScooterInfo] = [
-        ScooterInfo(name: "Lemon Pro S1", battery: 85),
-    ]
+    
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
-    struct ScooterInfo: Identifiable {
-        let id = UUID()
-        let name: String
-        let battery: Int
+    // Computed property to get actual scooter objects
+    private var activeScooters: [Scooter] {
+        allScooters.filter { scooterIds.contains($0.id) }
     }
     
     var body: some View {
         VStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(activeScooters) { scooter in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(activeScooters.count > 1 ? "ACTIVE SCOOTER" : "ACTIVE RIDE")
-                                .font(.system(size: 10, weight: .black))
-                                .foregroundColor(.lemonPrimary)
-                            Text(scooter.name)
-                                .font(.system(size: 18, weight: .bold))
-                        }
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Image(systemName: "bolt.fill")
-                            Text("\(scooter.battery)%")
-                        }
+                if activeScooters.isEmpty && !scooterIds.isEmpty {
+                    // Fallback if data is still loading
+                    Text("Loading scooters...")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.lemonPrimary)
-                    }
-                    if scooter.id != activeScooters.last?.id {
-                        Divider().background(Color.white.opacity(0.1))
+                        .foregroundColor(.gray)
+                } else {
+                    ForEach(activeScooters) { scooter in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(activeScooters.count > 1 ? "ACTIVE SCOOTER" : "ACTIVE RIDE")
+                                    .font(.system(size: 10, weight: .black))
+                                    .foregroundColor(.lemonPrimary)
+                                Text(scooter.displayName)
+                                    .font(.system(size: 18, weight: .bold))
+                            }
+                            Spacer()
+                            HStack(spacing: 4) {
+                                Image(systemName: "bolt.fill")
+                                Text("\(scooter.displayBattery)%")
+                            }
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.lemonPrimary)
+                        }
+                        if scooter.id != activeScooters.last?.id {
+                            Divider().background(Color.white.opacity(0.1))
+                        }
                     }
                 }
             }
@@ -56,7 +63,7 @@ struct ActiveRideView: View {
                 Spacer()
                 RideStatView(label: "COST", value: String(format: "Rs. %.2f", rideCost))
                 Spacer()
-                RideStatView(label: "DISTANCE", value: "0.2 km")
+                RideStatView(label: "DISTANCE", value: String(format: "%.1f km", Double(rideDuration) * 0.005)) // Mock distance
             }
             
             VStack(spacing: 12) {
@@ -76,7 +83,7 @@ struct ActiveRideView: View {
                 }
                 
                 Button(action: {
-                    NotificationCenter.default.post(name: NSNotification.Name("RequestEndRide"), object: (rideDuration, rideCost, activeScooters.count))
+                    NotificationCenter.default.post(name: NSNotification.Name("RequestEndRide"), object: (rideDuration, rideCost, scooterIds.count))
                 }) {
                     Text("END RIDE")
                         .font(.system(size: 16, weight: .black))
@@ -97,14 +104,7 @@ struct ActiveRideView: View {
         )
         .onReceive(timer) { _ in
             rideDuration += 1
-            rideCost = Double(rideDuration) * 0.5 * Double(activeScooters.count) 
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RequestAddScooter"))) { _ in
-            if activeScooters.count < 5 {
-                withAnimation {
-                    activeScooters.append(ScooterInfo(name: "Lemon Pro S\(activeScooters.count + 1)", battery: Int.random(in: 70...95)))
-                }
-            }
+            rideCost = Double(rideDuration) * 0.5 * Double(max(1, scooterIds.count)) 
         }
     }
     

@@ -109,7 +109,7 @@ struct MainDashboardView: View {
                             }
                             .padding(.horizontal, 24)
                         } else if isActiveRide {
-                            ActiveRideView(isActive: $isActiveRide)
+                            ActiveRideView(isActive: $isActiveRide, scooterIds: activeScooterIds, allScooters: scooterViewModel.scooters)
                                 .transition(.move(edge: .bottom).combined(with: .opacity))
                         } else if isReserved, let scooter = reservedScooter {
                             ReservationView(scooter: scooter, isReserved: $isReserved)
