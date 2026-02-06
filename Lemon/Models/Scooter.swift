@@ -19,6 +19,8 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
     var reservedBy: String?
     var status: String?
     var lastUpdated: Date?
+    var alarmActive: Bool?
+    var geohash: String?
     
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -51,6 +53,8 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
         case reservedBy = "reserved_by"
         case status
         case lastUpdated = "last_updated"
+        case alarmActive = "alarm_active"
+        case geohash
     }
     
     init(id: String = UUID().uuidString, 
@@ -61,7 +65,9 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
          isLocked: Bool = true, 
          isAvailable: Bool = true, 
          status: String = "idle", 
-         lastUpdated: Date? = Date()) {
+         lastUpdated: Date? = Date(),
+         alarmActive: Bool = false,
+         geohash: String? = nil) {
         self.id = id
         self.name = name
         self.latitude = latitude
@@ -71,5 +77,7 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
         self.isAvailable = isAvailable
         self.status = status
         self.lastUpdated = lastUpdated
+        self.alarmActive = alarmActive
+        self.geohash = geohash
     }
 }

@@ -1,16 +1,25 @@
-const { createClient } = require('@supabase/supabase-js');
+const admin = require("firebase-admin");
 require('dotenv').config();
 
-// Configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://vheohhpaoqinyjedxemz.supabase.co";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Note: To use this in production, you should provide a service-account-key.json
+// or use environment variables. For this simulation, we'll try to use
+// Application Default Credentials or look for a local key.
+const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT || "./service-account-key.json";
 
-if (!SUPABASE_SERVICE_ROLE_KEY) {
-  console.error("Error: SUPABASE_SERVICE_ROLE_KEY is required in .env file");
-  process.exit(1);
+try {
+  const serviceAccount = require(serviceAccountPath);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://lemon-app-final-prod-1-default-rtdb.firebasedatabase.app"
+  });
+} catch (e) {
+  console.warn("Service account not found, trying default initialization...");
+  admin.initializeApp({
+    databaseURL: "https://lemon-app-final-prod-1-default-rtdb.firebasedatabase.app"
+  });
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const db = admin.database();
 
 const SCOOTERS_TO_SIMULATE = [
   { name: "Lemon S1 #1024", lat: 6.9270, lng: 79.8440 },
@@ -19,84 +28,73 @@ const SCOOTERS_TO_SIMULATE = [
   { name: "Lemon S1 Pro #501", lat: 6.9150, lng: 79.8600 }
 ];
 
-let activeScooters = [];
+let activeScooterIds = [];
 
 async function initializeScooters() {
-  console.log("Initializing scooters in database...");
+  console.log("Initializing scooters in Firebase Realtime Database...");
   
+  const scootersRef = db.ref("scooters");
+  const snapshot = await scootersRef.once("value");
+  const existingScooters = snapshot.val() || {};
+  
+  const existingNames = Object.values(existingScooters).map(s => s.name);
+
   for (const s of SCOOTERS_TO_SIMULATE) {
-    // Check if scooter exists by name
-    let { data: existing } = await supabase
-      .from('scooters')
-      .select('*')
-      .eq('name', s.name)
-      .single();
-      
-    if (!existing) {
+    if (!existingNames.includes(s.name)) {
       console.log(`Creating scooter: ${s.name}`);
-      const { data: created, error } = await supabase
-        .from('scooters')
-        .insert({
-          name: s.name,
-          latitude: s.lat,
-          longitude: s.lng,
-          battery_percentage: 100,
-          is_locked: true,
-          is_available: true,
-          status: 'idle'
-        })
-        .select()
-        .single();
-        
-      if (error) console.error("Error creating scooter:", error);
-      else activeScooters.push(created);
+      const newScooterRef = scootersRef.push();
+      const newScooter = {
+        id: newScooterRef.key,
+        name: s.name,
+        latitude: s.lat,
+        longitude: s.lng,
+        battery_percentage: 100,
+        is_locked: true,
+        is_available: true,
+        status: 'idle',
+        last_updated: admin.database.ServerValue.TIMESTAMP
+      };
+      await newScooterRef.set(newScooter);
+      activeScooterIds.push(newScooterRef.key);
     } else {
-      console.log(`Scooter exists: ${s.name} (${existing.id})`);
-      activeScooters.push(existing);
+      // Find the ID of the existing one
+      const id = Object.keys(existingScooters).find(key => existingScooters[key].name === s.name);
+      console.log(`Scooter exists: ${s.name} (${id})`);
+      activeScooterIds.push(id);
     }
   }
 }
 
 function moveRandomly(lat, lng) {
-  // Move by a tiny amount (~5-10 meters)
   const deltaLat = (Math.random() - 0.5) * 0.0002;
   const deltaLng = (Math.random() - 0.5) * 0.0002;
   return { lat: lat + deltaLat, lng: lng + deltaLng };
 }
 
 async function updateScooterStates() {
-  for (let i = 0; i < activeScooters.length; i++) {
-    const scooter = activeScooters[i];
+  for (const id of activeScooterIds) {
+    const scooterRef = db.ref(`scooters/${id}`);
+    const snapshot = await scooterRef.once("value");
+    const scooter = snapshot.val();
+
+    if (!scooter) continue;
     
-    // Simulate some movement and battery drain if "unlocked"
-    // For simulation purposes, let's just move them slightly even if locked to show live updates
     const newPos = moveRandomly(scooter.latitude, scooter.longitude);
     const newBattery = Math.max(0, scooter.battery_percentage - (Math.random() > 0.8 ? 1 : 0));
     
-    const { data: updated, error } = await supabase
-      .from('scooters')
-      .update({
-        latitude: newPos.lat,
-        longitude: newPos.lng,
-        battery_percentage: newBattery,
-        last_updated: new Date().toISOString()
-      })
-      .eq('id', scooter.id)
-      .select()
-      .single();
-      
-    if (error) {
-      console.error(`Error updating scooter ${scooter.name}:`, error.message);
-    } else {
-      activeScooters[i] = updated;
-      console.log(`Updated ${scooter.name}: Lat ${updated.latitude.toFixed(5)}, Lng ${updated.longitude.toFixed(5)}, Battery ${updated.battery_percentage}%`);
-    }
+    await scooterRef.update({
+      latitude: newPos.lat,
+      longitude: newPos.lng,
+      battery_percentage: newBattery,
+      last_updated: admin.database.ServerValue.TIMESTAMP
+    });
+    
+    console.log(`Updated ${scooter.name}: Lat ${newPos.lat.toFixed(5)}, Lng ${newPos.lng.toFixed(5)}, Battery ${newBattery}%`);
   }
 }
 
 async function start() {
   await initializeScooters();
-  
   console.log("Starting simulation loop (every 3 seconds)...");
   setInterval(updateScooterStates, 3000);
 }

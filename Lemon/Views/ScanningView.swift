@@ -29,6 +29,9 @@ struct ScanningView: View {
                     
                     print("Scanned code: \(code)")
                     
+                    // Trigger haptic on successful scan
+                    HapticManager.shared.impact(.medium)
+                    
                     // Logic fault check: Prevent scanning of duplicate IDs in the same session
                     if activeScooterIds.contains(code) {
                         errorMessage = "Scooter already added to ride."
@@ -42,7 +45,11 @@ struct ScanningView: View {
                         do {
                             // In a real app, we'd fetch the scooter first to check is_locked
                             // But for this simulation, we'll try to unlock it.
-                            try await ScooterService.shared.unlockScooter(id: code)
+                            let loc = LocationManager.shared.userLocation?.coordinate
+                            try await ScooterService.shared.unlockScooter(id: code, latitude: loc?.latitude ?? 0, longitude: loc?.longitude ?? 0)
+                            
+                            // Trigger success haptic on unlock
+                            HapticManager.shared.notification(.success)
                             
                             await MainActor.run {
                                 withAnimation {

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import CoreLocation
 
 struct ActiveRideView: View {
     @Binding var isActive: Bool
@@ -15,6 +16,8 @@ struct ActiveRideView: View {
     
     @State private var rideDuration = 0
     @State private var rideCost: Double = 0.0
+    @State private var totalDistance: Double = 0.0
+    @State private var lastLocation: CLLocation?
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
@@ -63,7 +66,7 @@ struct ActiveRideView: View {
                 Spacer()
                 RideStatView(label: "COST", value: String(format: "Rs. %.2f", rideCost))
                 Spacer()
-                RideStatView(label: "DISTANCE", value: String(format: "%.1f km", Double(rideDuration) * 0.005)) // Mock distance
+                RideStatView(label: "DISTANCE", value: String(format: "%.2f km", totalDistance))
             }
             
             VStack(spacing: 12) {
@@ -83,7 +86,7 @@ struct ActiveRideView: View {
                 }
                 
                 Button(action: {
-                    NotificationCenter.default.post(name: NSNotification.Name("RequestEndRide"), object: (rideDuration, rideCost, scooterIds.count))
+                    NotificationCenter.default.post(name: NSNotification.Name("RequestEndRide"), object: (rideDuration, rideCost, scooterIds.count, totalDistance))
                 }) {
                     Text("END RIDE")
                         .font(.system(size: 16, weight: .black))
@@ -105,6 +108,16 @@ struct ActiveRideView: View {
         .onReceive(timer) { _ in
             rideDuration += 1
             rideCost = Double(rideDuration) * 0.5 * Double(max(1, scooterIds.count)) 
+        }
+        .onReceive(LocationManager.shared.$userLocation) { newLocation in
+             guard let loc = newLocation else { return }
+             if let last = lastLocation {
+                 let distanceDelta = loc.distance(from: last) / 1000.0 // Convert to km
+                 if distanceDelta < 0.5 { // Simple noise filter (<500m jumps)
+                     totalDistance += distanceDelta
+                 }
+             }
+             lastLocation = loc
         }
     }
     

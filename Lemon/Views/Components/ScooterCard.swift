@@ -23,9 +23,23 @@ struct ScooterCard: View {
                 }
                 Spacer()
                 HStack(spacing: 15) {
-                    Label("\(Int(scooter.rangeKm)) km", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
-                    Label("\(scooter.displayBattery)%", systemImage: "bolt.fill")
-                        .foregroundColor(scooter.displayBattery < 20 ? .red : .lemonPrimary)
+                    Button(action: {
+                        Task {
+                            try? await ScooterService.shared.toggleAlarm(id: scooter.id, active: !(scooter.alarmActive ?? false))
+                        }
+                    }) {
+                        Image(systemName: (scooter.alarmActive ?? false) ? "bell.and.waves.left.and.right.fill" : "bell.fill")
+                            .foregroundColor((scooter.alarmActive ?? false) ? .lemonPrimary : .white)
+                            .padding(10)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Label("\(Int(scooter.rangeKm)) km", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
+                        Label("\(scooter.displayBattery)%", systemImage: "bolt.fill")
+                            .foregroundColor(scooter.displayBattery < 20 ? .red : .lemonPrimary)
+                    }
                 }
                 .font(.system(size: 14, weight: .bold, design: .rounded))
             }

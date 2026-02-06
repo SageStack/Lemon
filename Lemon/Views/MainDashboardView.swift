@@ -21,7 +21,7 @@ struct MainDashboardView: View {
     @State private var isReserved = false
     @State private var isShowingParkingVerification = false
     @State private var showTripSummary = false
-    @State private var lastTripData: (duration: Int, cost: Double, count: Int)?
+    @State private var lastTripData: (duration: Int, cost: Double, count: Int, distance: Double)?
     @State private var isShowingGroupRideSelection = false
     @State private var isGroupSelectionMode = false
     @State private var selectedGroupScooters: Set<Scooter> = []
@@ -189,8 +189,8 @@ struct MainDashboardView: View {
                 isScanning = true
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RequestEndRide"))) { notification in
-                if let data = notification.object as? (Int, Double, Int) {
-                    lastTripData = (data.0, data.1, data.2)
+                if let data = notification.object as? (Int, Double, Int, Double) {
+                    lastTripData = (data.0, data.1, data.2, data.3)
                 }
                 isShowingParkingVerification = true
             }
@@ -201,7 +201,7 @@ struct MainDashboardView: View {
         .background(Color.lemonBackground)
         .sheet(isPresented: $showTripSummary) {
             if let data = lastTripData {
-                TripSummaryView(duration: data.duration, cost: data.cost, scooterCount: data.count) {
+                TripSummaryView(duration: data.duration, cost: data.cost, scooterCount: data.count, distance: data.distance) {
                     showTripSummary = false
                     lastTripData = nil
                 }
@@ -227,7 +227,13 @@ struct MainDashboardView: View {
             ScanningView(isScanning: $isScanning, isActiveRide: $isActiveRide, activeScooterIds: $activeScooterIds)
         }
         .fullScreenCover(isPresented: $isShowingParkingVerification) {
-            ParkingVerificationView(isVisible: $isShowingParkingVerification, isActiveRide: $isActiveRide, scooterIds: activeScooterIds)
+            ParkingVerificationView(
+                isVisible: $isShowingParkingVerification,
+                isActiveRide: $isActiveRide,
+                scooterIds: activeScooterIds,
+                rideData: lastTripData,
+                userId: authViewModel.currentUser?.id
+            )
         }
         .sheet(isPresented: $isShowingGroupRideSelection) {
             GroupRideSelectionView(isPresented: $isShowingGroupRideSelection) {

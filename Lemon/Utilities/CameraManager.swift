@@ -61,11 +61,20 @@ class CameraManager: NSObject, ObservableObject {
                 return
             }
             
-            // Metadata output for QR (will be added by specific views if needed, or we can add it here generally)
-            // For now, we keep it simple as a base session manager
+            self.photoOutput = AVCapturePhotoOutput()
+            if self.session.canAddOutput(self.photoOutput!) {
+                self.session.addOutput(self.photoOutput!)
+            }
             
             self.session.commitConfiguration()
         }
+    }
+    
+    var photoOutput: AVCapturePhotoOutput?
+    
+    func capturePhoto(delegate: AVCapturePhotoCaptureDelegate) {
+        let settings = AVCapturePhotoSettings()
+        photoOutput?.capturePhoto(with: settings, delegate: delegate)
     }
     
     func startSession() {

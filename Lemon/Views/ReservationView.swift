@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import UIKit
 
 struct ReservationView: View {
     let scooter: Scooter
@@ -79,6 +80,16 @@ struct ReservationView: View {
         .onReceive(timer) { _ in
             if timeRemaining > 0 {
                 timeRemaining -= 1
+                
+                // Smart Notification: Reservation expiring in 2 mins
+                if timeRemaining == 120 {
+                    NotificationManager.shared.sendImmediateNotification(
+                        title: "Reservation Expiring",
+                        body: "Your 2-min reservation for \(scooter.displayName) is expiring!",
+                        identifier: "reservation_expiry_\(scooter.id)"
+                    )
+                    HapticManager.shared.notification(.warning)
+                }
             } else {
                 Task {
                     try? await ScooterService.shared.cancelReservation(id: scooter.id)

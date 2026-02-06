@@ -7,9 +7,11 @@
 
 import Foundation
 import CoreLocation
-import Combine // Required for ObservableObject and @Published
+import Combine
+import UIKit // Required for ObservableObject and @Published
 
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    static let shared = LocationManager()
     private let manager = CLLocationManager()
     @Published var userLocation: CLLocation?
     
@@ -22,6 +24,17 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        userLocation = locations.last
+        guard let location = locations.last else { return }
+        userLocation = location
+        
+        // Smart Notification: Entering a Slow Zone
+        if let zone = SlowZoneManager.shared.checkZone(location: location) {
+            NotificationManager.shared.sendImmediateNotification(
+                title: "Entering Slow Zone",
+                body: "You're entering \(zone.name). Speed limited for safety.",
+                identifier: "slow_zone_\(zone.id)"
+            )
+            HapticManager.shared.notification(.warning)
+        }
     }
 }

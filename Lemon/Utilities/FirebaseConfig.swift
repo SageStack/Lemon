@@ -10,8 +10,10 @@ import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseDatabase
+import FirebaseStorage
 
 class FirebaseManager {
+
     static let shared = FirebaseManager()
     
     // Note: User needs to add Firebase to the project via Swift Package Manager
@@ -33,5 +35,12 @@ class FirebaseManager {
         Database.database().reference()
     }
     
-    // Future: Add Storage or Functions if needed
+    var storage: Storage {
+        Storage.storage()
+    }
+    
+    // Cloud Functions Configuration
+    var functionsBaseUrl: String {
+        return "https://us-central1-lemon-app-final-prod-1.cloudfunctions.net"
+    }
 }

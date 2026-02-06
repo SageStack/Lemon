@@ -1,1 +1,35 @@
-{ "rules": { ".read": true, ".write": true } }
+{
+  "rules": {
+    "scooters": {
+      ".read": "auth != null",
+      ".write": false, 
+
+      ".indexOn": ["geohash"],
+      "$scooterId": {}
+    },
+    "scooter_secure_data": {
+      ".read": false,
+      ".write": false
+    },
+    "ride_history": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false 
+      }
+    },
+    "users": {
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && (!data.exists() ? (!newData.hasChild('role') && !newData.hasChild('credits')) : ((!newData.hasChild('role') || newData.child('role').val() == data.child('role').val()) && (!newData.hasChild('credits') || newData.child('credits').val() == data.child('credits').val())))"
+        }
+    },
+    "internal": {
+        "rate_limits": {
+            "$uid": {
+                ".read": "auth != null && auth.uid === $uid",
+                ".write": false
+            }
+        }
+    }
+  }
+}

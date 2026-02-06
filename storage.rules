@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /parking_verification/{userId}/{allPaths=**} {
+      // Allow users to upload their own verification photos
+      // and read them back if needed (e.g., for history).
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Default: deny all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

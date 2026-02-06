@@ -15,7 +15,7 @@ import CryptoKit
 
 @MainActor
 class AuthViewModel: NSObject, ObservableObject {
-    @Published var isAuthenticated: Bool = UserDefaults.standard.bool(forKey: "isAuthenticated")
+    @Published var isAuthenticated: Bool = false
     @Published var isLoading = false
     @Published var currentUser: User?
     @Published var errorMessage: String?
@@ -264,7 +264,7 @@ class AuthViewModel: NSObject, ObservableObject {
         if let user = user {
             print("Auth: Updating state to AUTHENTICATED")
             self.isAuthenticated = true
-            UserDefaults.standard.set(true, forKey: "isAuthenticated")
+            self.isAuthenticated = true
             self.currentUser = User(
                 id: user.uid,
                 name: user.displayName ?? "User",
@@ -273,7 +273,7 @@ class AuthViewModel: NSObject, ObservableObject {
         } else {
             print("Auth: Updating state to UNAUTHENTICATED")
             self.isAuthenticated = false
-            UserDefaults.standard.set(false, forKey: "isAuthenticated")
+            self.isAuthenticated = false
             self.currentUser = nil
         }
     }

@@ -11,6 +11,7 @@ struct TripSummaryView: View {
     let duration: Int
     let cost: Double
     let scooterCount: Int
+    let distance: Double
     var onDone: () -> Void
     
     var body: some View {
@@ -49,7 +50,7 @@ struct TripSummaryView: View {
                         Spacer()
                         SummaryItem(label: "SCOOTERS", value: "\(scooterCount)")
                         Spacer()
-                        SummaryItem(label: "DISTANCE", value: "1.4 km")
+                        SummaryItem(label: "DISTANCE", value: String(format: "%.2f km", distance))
                     }
                 }
                 .padding(30)
@@ -75,6 +76,9 @@ struct TripSummaryView: View {
                 .padding(.horizontal, 30)
                 .padding(.bottom, 40)
             }
+        }
+        .onAppear {
+            HapticManager.shared.notification(.success)
         }
     }
     

@@ -9,13 +9,9 @@ import SwiftUI
 
 struct RideHistoryView: View {
     @Environment(\.dismiss) var dismiss
-    
-    let history = [
-        RideRecord(date: "Today", distance: "2.4 km", cost: "Rs. 450", duration: "12 min"),
-        RideRecord(date: "Yesterday", distance: "1.8 km", cost: "Rs. 320", duration: "8 min"),
-        RideRecord(date: "Jan 4", distance: "4.2 km", cost: "Rs. 850", duration: "25 min"),
-        RideRecord(date: "Jan 2", distance: "0.5 km", cost: "Rs. 150", duration: "3 min")
-    ]
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var history: [RideRecord] = []
+    @State private var isLoading = true
     
     var body: some View {
         ZStack {
@@ -38,26 +34,59 @@ struct RideHistoryView: View {
                 }
                 .padding()
                 
-                ScrollView {
-                    VStack(spacing: 15) {
-                        ForEach(history) { ride in
-                            RideHistoryRow(ride: ride)
-                        }
+                if isLoading {
+                    Spacer()
+                    ProgressView()
+                        .tint(.lemonPrimary)
+                    Spacer()
+                } else if history.isEmpty {
+                    Spacer()
+                    VStack(spacing: 20) {
+                        Image(systemName: "bicycle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.2))
+                        Text("No rides yet")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white.opacity(0.5))
                     }
-                    .padding()
+                    Spacer()
+                } else {
+                    ScrollView {
+                        VStack(spacing: 15) {
+                            ForEach(history) { ride in
+                                RideHistoryRow(ride: ride)
+                            }
+                        }
+                        .padding()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            fetchHistory()
+        }
+    }
+    
+    private func fetchHistory() {
+        guard let userId = authViewModel.currentUser?.id else { return }
+        
+        Task {
+            do {
+                let records = try await ScooterService.shared.fetchRideHistory(for: userId)
+                await MainActor.run {
+                    self.history = records
+                    self.isLoading = false
+                }
+            } catch {
+                print("Failed to fetch history: \(error)")
+                await MainActor.run {
+                    self.isLoading = false
                 }
             }
         }
     }
 }
 
-struct RideRecord: Identifiable {
-    let id = UUID()
-    let date: String
-    let distance: String
-    let cost: String
-    let duration: String
-}
 
 struct RideHistoryRow: View {
     let ride: RideRecord
@@ -65,14 +94,14 @@ struct RideHistoryRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(ride.date)
+                Text(ride.displayDate)
                     .font(.system(size: 14, weight: .bold))
-                Text("\(ride.distance) • \(ride.duration)")
+                Text("\(ride.displayDistance) • \(ride.displayDuration)")
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.6))
             }
             Spacer()
-            Text(ride.cost)
+            Text(ride.displayCost)
                 .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundColor(.lemonPrimary)
         }

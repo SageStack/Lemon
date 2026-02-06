@@ -1,10 +1,13 @@
 import SwiftUI
 import AVFoundation
+import FirebaseStorage
 
 struct ParkingVerificationView: View {
     @Binding var isVisible: Bool
     @Binding var isActiveRide: Bool
     let scooterIds: [String]
+    let rideData: (duration: Int, cost: Double, count: Int, distance: Double)?
+    let userId: String?
     
     @State private var currentScooterIndex = 0
     @State private var isCaptured = false
@@ -12,9 +15,8 @@ struct ParkingVerificationView: View {
     @State private var sessionRunning = true
     
     // Logic fault: Check for empty IDs
-    private var isLastScooter: Bool {
-        currentScooterIndex >= scooterIds.count - 1
-    }
+    @State private var uploadedPhotoUrl: String?
+    @State private var isUploading = false
     
     var body: some View {
         ZStack {
@@ -46,7 +48,7 @@ struct ParkingVerificationView: View {
                     }
                 }
                 
-                Text(isCaptured ? "Great! Move to the next one or finish." : "Please take a photo of scooter \(scooterIds.count > 0 ? (scooterIds[safe: currentScooterIndex] ?? "selected") : "selected") parked correctly.")
+                Text(isCaptured ? (isUploading ? "Uploading verification..." : "Great! Verification uploaded.") : "Please take a photo of scooter \(scooterIds.count > 0 ? (scooterIds[safe: currentScooterIndex] ?? "selected") : "selected") parked correctly.")
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -74,10 +76,16 @@ struct ParkingVerificationView: View {
                     if isCaptured {
                         ZStack {
                             Color.black.opacity(0.4)
-                            Image(systemName: "checkmark.circle.fill")
-                                .resizable()
-                                .frame(width: 80, height: 80)
-                                .foregroundColor(.lemonPrimary)
+                            if isUploading {
+                                ProgressView()
+                                    .tint(.lemonPrimary)
+                                    .scaleEffect(1.5)
+                            } else {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .resizable()
+                                    .frame(width: 80, height: 80)
+                                    .foregroundColor(.lemonPrimary)
+                            }
                         }
                         .cornerRadius(20)
                     }
@@ -86,12 +94,16 @@ struct ParkingVerificationView: View {
                 
                 Spacer()
                 
-                if isCaptured {
+                if isCaptured && !isUploading {
                     if isLastScooter {
                         Button(action: {
                             Task {
                                 do {
-                                    try await ScooterService.shared.lockScooters(ids: scooterIds)
+                                    guard let photoUrl = uploadedPhotoUrl else { return }
+                                    // Secure Backend Call: End Ride & Calculate Cost
+                                    let loc = LocationManager.shared.userLocation?.coordinate
+                                    try await ScooterService.shared.endRide(scooterIds: scooterIds, latitude: loc?.latitude ?? 0, longitude: loc?.longitude ?? 0, photoUrl: photoUrl)
+                                    
                                     await MainActor.run {
                                         withAnimation {
                                             isActiveRide = false
@@ -117,6 +129,7 @@ struct ParkingVerificationView: View {
                             withAnimation {
                                 currentScooterIndex += 1
                                 isCaptured = false
+                                uploadedPhotoUrl = nil
                                 sessionRunning = true
                             }
                         }) {
@@ -130,7 +143,7 @@ struct ParkingVerificationView: View {
                         }
                         .padding(.horizontal, 30)
                     }
-                } else {
+                } else if !isCaptured {
                     Button(action: {
                         capturePhoto()
                     }) {
@@ -158,6 +171,18 @@ struct ParkingVerificationView: View {
             shutterEffect = true
         }
         
+        // Real Capture
+        let delegate = PhotoCaptureDelegate { result in
+            switch result {
+            case .success(let data):
+                uploadPhoto(data: data)
+            case .failure(let error):
+                print("Capture failed: \(error)")
+            }
+        }
+        
+        CameraManager.shared.capturePhoto(delegate: delegate)
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             withAnimation(.easeInOut(duration: 0.1)) {
                 shutterEffect = false
@@ -170,6 +195,49 @@ struct ParkingVerificationView: View {
             }
         }
     }
+    
+    private func uploadPhoto(data: Data) {
+        isUploading = true
+        let storageRef = FirebaseManager.shared.storage.reference().child("parking_verification/\(userId ?? "unknown")/\(UUID().uuidString).jpg")
+        
+        storageRef.putData(data, metadata: nil) { metadata, error in
+            if let error = error {
+                print("Upload failed: \(error)")
+                isUploading = false
+                return
+            }
+            
+            storageRef.downloadURL { url, error in
+                isUploading = false
+                if let url = url {
+                    self.uploadedPhotoUrl = url.absoluteString
+                }
+            }
+        }
+    }
+}
+
+class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private let completion: (Result<Data, Error>) -> Void
+    
+    init(completion: @escaping (Result<Data, Error>) -> Void) {
+        self.completion = completion
+    }
+    
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        if let error = error {
+            completion(.failure(error))
+            return
+        }
+        
+        guard let imageData = photo.fileDataRepresentation() else {
+            completion(.failure(NSError(domain: "PhotoCapture", code: -1, userInfo: [NSLocalizedDescriptionKey: "No image data"])))
+            return
+        }
+        
+        completion(.success(imageData))
+    }
+}
 }
 
 // Helper extension for safe array indexing
