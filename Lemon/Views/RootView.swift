@@ -2,7 +2,7 @@
 //  RootView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -13,9 +13,7 @@ struct RootView: View {
     
     var body: some View {
         Group {
-            // We use the AppStorage value for immediate rendering (Optimistic UI)
-            // AuthViewModel will eventually validate this with Firebase and update if needed
-            if isAuthenticated {
+            if authViewModel.isAuthenticated {
                 MainDashboardView()
                     .environmentObject(authViewModel)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -25,6 +23,6 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isAuthenticated)
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: authViewModel.isAuthenticated)
     }
 }

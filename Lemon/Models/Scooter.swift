@@ -21,6 +21,9 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
     var lastUpdated: Date?
     var alarmActive: Bool?
     var geohash: String?
+    var currentRideStart: Date?
+    var currentRideClientId: String?
+    var h3Index: String?
     
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -55,6 +58,9 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
         case lastUpdated = "last_updated"
         case alarmActive = "alarm_active"
         case geohash
+        case currentRideStart = "current_ride_start"
+        case currentRideClientId = "current_ride_client_id"
+        case h3Index = "h3_index"
     }
     
     init(id: String = UUID().uuidString, 
@@ -67,7 +73,11 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
          status: String = "idle", 
          lastUpdated: Date? = Date(),
          alarmActive: Bool = false,
-         geohash: String? = nil) {
+         geohash: String? = nil,
+         currentRideStart: Date? = nil,
+         reservedBy: String? = nil,
+         currentRideClientId: String? = nil,
+         h3Index: String? = nil) {
         self.id = id
         self.name = name
         self.latitude = latitude
@@ -75,9 +85,31 @@ struct Scooter: Identifiable, Equatable, Hashable, Codable {
         self.batteryPercentage = batteryPercentage
         self.isLocked = isLocked
         self.isAvailable = isAvailable
+        self.reservedBy = reservedBy
         self.status = status
         self.lastUpdated = lastUpdated
         self.alarmActive = alarmActive
         self.geohash = geohash
+        self.currentRideStart = currentRideStart
+        self.currentRideClientId = currentRideClientId
+        self.h3Index = h3Index
+    }
+}
+
+struct ScooterAggregate: Identifiable, Decodable {
+    let id: String // H3 Index
+    let count: Int
+    let latitude: Double
+    let longitude: Double
+    
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "h3"
+        case count
+        case latitude = "lat"
+        case longitude = "lng"
     }
 }

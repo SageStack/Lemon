@@ -2,7 +2,7 @@
 //  SupportView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -20,9 +20,9 @@ struct SupportView: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .padding(12)
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.lemonGlassBackground)
                             .clipShape(Circle())
                     }
                     Spacer()
@@ -36,8 +36,12 @@ struct SupportView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 25) {
                         Text("HOW CAN WE HELP?")
-                            .font(.system(size: 24, weight: .black, design: .monospaced))
-                            .foregroundColor(.lemonPrimary)
+                            .font(.system(size: 20, weight: .black, design: .monospaced))
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(Color.lemonPrimary)
+                            .cornerRadius(30)
                             .padding(.top)
                         
                         FAQRow(question: "How do I start a ride?", answer: "Scan the QR code on the scooter using the 'Scan to Unlock' button on the home screen.")
@@ -59,7 +63,7 @@ struct SupportView: View {
                                 }
                             }
                             .padding()
-                            .background(Color.white.opacity(0.05))
+                            .background(Color.lemonCardBackground)
                             .cornerRadius(15)
                         }
                     }
@@ -81,7 +85,7 @@ struct FAQRow: View {
                 HStack {
                     Text(question)
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .foregroundColor(.lemonPrimary)
@@ -91,11 +95,11 @@ struct FAQRow: View {
             if isExpanded {
                 Text(answer)
                     .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(.secondary)
                     .padding(.top, 5)
             }
             
-            Divider().background(Color.white.opacity(0.1))
+            Divider().background(Color.lemonSeparator)
         }
     }
 }

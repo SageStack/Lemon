@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var themeManager: ThemeManager
     
     @State private var activeSheet: SettingsDestination?
     @State private var alertMessage: String?
@@ -24,6 +25,50 @@ struct SettingsView: View {
         var id: Self { self }
     }
     
+    private var appearancePicker: some View {
+        Group {
+            HStack(spacing: 15) {
+                Image(systemName: "circle.lefthalf.filled")
+                    .foregroundColor(.lemonPrimary)
+                    .frame(width: 24)
+                
+                Text("Appearance")
+                    .font(.system(size: 16))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Menu {
+                    ForEach(AppTheme.allCases) { theme in
+                        Button(action: {
+                            themeManager.selection = theme
+                        }) {
+                            HStack {
+                                Text(theme.rawValue)
+                                if themeManager.selection == theme {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(themeManager.selection.rawValue)
+                            .font(.system(size: 16))
+                            .foregroundColor(.primary.opacity(0.6))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(.primary.opacity(0.3))
+                    }
+                }
+            }
+            .padding()
+            
+            Divider().background(Color.lemonSeparator)
+                .padding(.leading, 54)
+        }
+    }
+    
     var body: some View {
         ZStack {
             Color.lemonBackground.ignoresSafeArea()
@@ -33,16 +78,17 @@ struct SettingsView: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "arrow.left")
+                        // Refactoring: Use adaptive header button
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .padding()
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.lemonGlassBackground)
                             .clipShape(Circle())
                     }
                     
                     Text("SETTINGS")
                         .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                         .padding(.leading, 10)
                     
                     Spacer()
@@ -68,18 +114,19 @@ struct SettingsView: View {
                                     showAlert = true
                                 }
                             }
-                            .background(Color.white.opacity(0.05))
+                            .background(Color.lemonCardBackground)
                             .cornerRadius(15)
                         }
                         
                         // Preferences Section
                         SettingsSection(title: "PREFERENCES") {
                             VStack(spacing: 1) {
+                                appearancePicker
                                 ToggleRow(title: "Push Notifications", icon: "bell.fill", isOn: $notificationsEnabled)
                                 ToggleRow(title: "Location Services", icon: "location.fill", isOn: $locationEnabled)
                                 ToggleRow(title: "Promotional Emails", icon: "envelope.fill", isOn: $promoEmailsEnabled)
                             }
-                            .background(Color.white.opacity(0.05))
+                            .background(Color.lemonCardBackground)
                             .cornerRadius(15)
                         }
                         
@@ -98,7 +145,7 @@ struct SettingsView: View {
                                     showAlert = true
                                 }
                             }
-                            .background(Color.white.opacity(0.05))
+                            .background(Color.lemonCardBackground)
                             .cornerRadius(15)
                         }
                         
@@ -127,7 +174,7 @@ struct SettingsView: View {
                         // Version Info
                         Text("Version 1.0.0 (Build 124)")
                             .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.3))
+                            .foregroundColor(.primary.opacity(0.3))
                             .frame(maxWidth: .infinity)
                             .padding(.top, 10)
                             .padding(.bottom, 40)
@@ -167,7 +214,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(.primary.opacity(0.5))
                 .padding(.leading, 5)
             
             content
@@ -190,14 +237,14 @@ struct SettingsRow: View {
                 
                 Text(title)
                     .font(.system(size: 16))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                 
                 Spacer()
                 
                 if showChevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.3))
+                    .font(.system(size: 14))
+                    .foregroundColor(.primary.opacity(0.3))
                 }
             }
             .padding()
@@ -206,7 +253,7 @@ struct SettingsRow: View {
         .buttonStyle(PlainButtonStyle())
         
         if showChevron {
-            Divider().background(Color.white.opacity(0.05))
+            Divider().background(Color.lemonSeparator)
                 .padding(.leading, 54)
         }
     }
@@ -225,7 +272,7 @@ struct ToggleRow: View {
             
             Text(title)
                 .font(.system(size: 16))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
             
             Spacer()
             
@@ -235,7 +282,7 @@ struct ToggleRow: View {
         }
         .padding()
         
-        Divider().background(Color.white.opacity(0.05))
+        Divider().background(Color.lemonSeparator)
             .padding(.leading, 54)
     }
 }

@@ -6,7 +6,12 @@
     <title>Lemon Scooter Simulator (Live)</title>
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-functions-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-check-compat.js"></script>
+    <!-- H3 Library -->
+    <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
     <!-- QR Code Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- Leaflet Map -->
@@ -129,11 +134,12 @@
                         </div>
                     </div>
                     <div>
-                        <div class="label">Pings (sec)</div>
-                        <div class="slider-container">
-                            <input type="range" id="freqSlider" min="1" max="60" value="3">
-                            <span class="val-display" id="freqVal">3s</span>
-                        </div>
+                        <div class="label">Power Mode</div>
+                        <select id="powerMode" style="margin:0; padding:8px;">
+                            <option value="high">High (3s Ping)</option>
+                            <option value="normal" selected>Normal (15s Ping)</option>
+                            <option value="low">Low Power (60s Ping)</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -141,9 +147,23 @@
                 <div id="map"></div>
                 
                 <button id="updateBtn">Broadcast Position</button>
+                <div style="display:flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                    <div id="uidDisplay" style="font-size: 10px; color: var(--text-secondary); cursor: pointer;" title="Click to copy UID">UID: Fetching...</div>
+                    <button id="registerMeBtn" style="width: auto; padding: 4px 10px; margin: 0; font-size: 10px;">Claim ID as Scooter</button>
+                </div>
             </div>
-            <div id="log">📡 Initializing connection...</div>
         </div>
+
+        <!-- Identity Management Section -->
+        <div class="card" id="identityCard">
+            <div class="label">Identity Management & Spoofing Test</div>
+            <div style="display:flex; gap: 10px; align-items: center;">
+                <input type="text" id="targetIdOverride" placeholder="Override Target ID (e.g. scooter_001)" style="margin:0;">
+                <button id="resetAuthBtn" style="width: auto; padding: 12px; margin: 0; font-size: 11px; background: #333; color: #aaa; border: 1px solid #444;">Reset UID</button>
+            </div>
+            <div id="spoofStatus" style="font-size: 10px; color: #ffbc00; margin-top: 10px; display:none; font-weight: bold;">⚠️ IDENTITY OVERRIDE ACTIVE: Broadcasting to custom ID</div>
+        </div>
+        <div id="log">📡 Initializing connection...</div>
 
         <div class="card" id="qrCard" style="display:none; text-align: center;">
             <div class="label">Scan to Unlock</div>
@@ -157,9 +177,13 @@
     <script>
         // --- Configuration ---
         const firebaseConfig = {
+            apiKey: "AIzaSyALC-IUzeLdD-lrTHPjZH2VBVIM-L_Xy4U", 
+            authDomain: "lemon-app-final-prod-1.firebaseapp.com",
+            databaseURL: "https://lemon-app-final-prod-1-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "lemon-app-final-prod-1",
-            apiKey: "AIzaSyALC-IUzeLdD-lrTHPjZH2VBVIM-L_Xy4U",
-            databaseURL: "https://lemon-app-final-prod-1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+            storageBucket: "lemon-app-final-prod-1.firebasestorage.app",
+            messagingSenderId: "22651612800",
+            appId: "1:22651612800:web:fddf8b4d371fe5f3c9c065"
         };
 
         // --- Global State ---
@@ -167,7 +191,33 @@
         let map = null;
         let marker = null;
         let heartbeatInterval = null;
+        let lastH3 = null; // Track H3 for cleanup
         const qrcode = new QRCode(document.getElementById("qrcode"), { width: 180, height: 180 });
+
+        // --- Geohash Helper ---
+        const Geohash = {
+            base32: "0123456789bcdefghjkmnpqrstuvwxyz",
+            encode: function(lat, lon, precision = 9) {
+                let latRange = [-90, 90], lonRange = [-180, 180];
+                let geohash = "", isEven = true, bit = 0, ch = 0;
+                while (geohash.length < precision) {
+                    let mid;
+                    if (isEven) {
+                        mid = (lonRange[0] + lonRange[1]) / 2;
+                        if (lon > mid) { ch |= (1 << (4 - bit)); lonRange[0] = mid; }
+                        else lonRange[1] = mid;
+                    } else {
+                        mid = (latRange[0] + latRange[1]) / 2;
+                        if (lat > mid) { ch |= (1 << (4 - bit)); latRange[0] = mid; }
+                        else latRange[1] = mid;
+                    }
+                    isEven = !isEven;
+                    if (bit < 4) bit++;
+                    else { geohash += this.base32[ch]; bit = 0; ch = 0; }
+                }
+                return geohash;
+            }
+        };
 
         // --- Helpers ---
         function status(msg, isError = false) {
@@ -183,8 +233,111 @@
         }
 
         // --- Firebase Logic ---
-        firebase.initializeApp(firebaseConfig);
+        try {
+            firebase.initializeApp(firebaseConfig);
+            console.log("🔥 Firebase Initialized with:", firebase.app().options);
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+        }
+
+        // Initialize App Check
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = '2381CB4C-81C9-4A5E-AEFF-B9682299E8AF'; 
+        
+        try {
+            const appCheck = firebase.appCheck();
+            // In Compat version, activate takes a string or provider. 
+            // Debug mode is triggered automatically by self.FIREBASE_APPCHECK_DEBUG_TOKEN
+            appCheck.activate(
+                '6Lc5V9QqAAAAADW_Xy4U...', // Site key (placeholder, ignored in debug)
+                true 
+            );
+            
+            console.log("🛡️ App Check Activation triggered");
+            
+            // Check config
+            console.log("🛠️ App Check Config Check:", {
+                projectId: firebase.app().options.projectId,
+                appId: firebase.app().options.appId
+            });
+
+            // Diagnostic
+            appCheck.getToken().then(t => {
+                console.log("🛡️ App Check Token Success!");
+                status("🛡️ App Check Verified");
+            }).catch(e => {
+                console.error("🛡️ App Check Token Error:", e);
+            });
+
+        } catch (e) {
+            console.error("❌ App Check Error:", e);
+            status("🛡️ App Check Init Failed: " + e.message, true);
+        }
+
         const db = firebase.database();
+        const auth = firebase.auth();
+        const functions = firebase.functions();
+
+        // Monitor Auth State
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                console.log("👤 Authenticated as:", user.uid);
+                document.getElementById('uidDisplay').innerText = "UID: " + user.uid;
+                document.getElementById('uidDisplay').onclick = () => {
+                    navigator.clipboard.writeText(user.uid);
+                    status("📋 UID Copied to Clipboard");
+                };
+                status("👤 Connection Secure (Authenticated)");
+                
+                // AUTOMATED PROVISIONING: Register current user as a scooter instantly
+                const registerSelf = async () => {
+                    const uid = user.uid;
+                    // Centering on user's last known good coordinates from logs for better visibility
+                    const pos = { lat: 6.864432 + (Math.random() - 0.5) * 0.005, lng: 79.921155 + (Math.random() - 0.5) * 0.005 };
+                    
+                    const snap = await db.ref('scooters/' + uid).once('value');
+                    if (!snap.exists()) {
+                        status("🆕 Auto-registering identifier...");
+                        const h3Idx = h3.latLngToCell(pos.lat, pos.lng, 8);
+                        const shardData = { id: uid, lat: pos.lat, lng: pos.lng, bat: 100, s: 'av' };
+
+                        await db.ref('scooters/' + uid).set({
+                            id: uid,
+                            name: "Simulated Vehicle (" + uid.substring(0,5) + ")",
+                            latitude: pos.lat,
+                            longitude: pos.lng,
+                            battery_percentage: 100,
+                            is_locked: true,
+                            is_available: true,
+                            geohash: Geohash.encode(pos.lat, pos.lng, 9),
+                            h3_index: h3Idx,
+                            last_updated: Date.now()
+                        });
+                        // Initialize indices
+                        await db.ref(`geolocations/${h3Idx}/${uid}`).set(true);
+                        await db.ref(`geo_shards/${h3Idx}/${uid}`).set(shardData);
+                        lastH3 = h3Idx;
+                        status("✅ Device Registered!");
+                    } else {
+                        status("📡 Device Recognized");
+                    }
+                    
+                    // Auto-select self
+                    setTimeout(() => {
+                        document.getElementById('scooterSelect').value = uid;
+                        selectScooter(uid);
+                    }, 500);
+                };
+                
+                registerSelf();
+                initFleet();
+            } else {
+                console.warn("🔐 Not authenticated. Signing in anonymously...");
+                auth.signInAnonymously().catch(e => {
+                    console.error("❌ Auth Error:", e);
+                    status("❌ Auth Failed: " + e.message, true);
+                });
+            }
+        });
 
         // Monitor connection
         db.ref(".info/connected").on("value", snap => {
@@ -198,7 +351,7 @@
 
         // Initialize Fleet
         async function initFleet() {
-            const ref = db.ref('scooters');
+            const ref = db.ref('scooters').limitToFirst(50);
             const timeout = setTimeout(() => {
                 status("⚠️ Connection timeout. Check your Database Rules and URL.", true);
             }, 8000);
@@ -206,19 +359,25 @@
             ref.once('value', snapshot => {
                 clearTimeout(timeout);
                 if (!snapshot.exists()) {
-                    status("🆕 Creating default fleet...");
-                    ref.set({
-                        "scooter_001": { name: "Lemon Pro #001", latitude: 6.9271, longitude: 79.8430, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
-                        "scooter_042": { name: "Lemon Lite #042", latitude: 6.9065, longitude: 79.8640, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
+                    console.log("Seeding default fleet (Admin only)...");
+                    const data = {
+                        "scooter_001": { name: "Lemon Pro #001", latitude: 6.864181, longitude: 79.921149, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
                         "scooter_999": { name: "Lemon Max #999", latitude: 6.8920, longitude: 79.8510, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() }
-                    }).catch(e => status("❌ Write Error: " + e.message, true));
+                    };
+                    Object.keys(data).forEach(k => data[k].geohash = Geohash.encode(data[k].latitude, data[k].longitude, 9));
+                    
+                    // Fail silently as this is just a seed for new DBs
+                    ref.set(data).catch(() => console.warn("Seed skipped: Not an admin."));
                 }
                 loadFleetDropdown();
-            }, e => status("❌ Read Error: " + e.message, true));
+            }, e => {
+                console.error("Read Error:", e);
+                status("❌ Connect Error (Rules): Check if UID can read /scooters", true);
+            });
         }
 
         function loadFleetDropdown() {
-            db.ref('scooters').on('value', snapshot => {
+            db.ref('scooters').limitToFirst(50).on('value', snapshot => {
                 const select = document.getElementById('scooterSelect');
                 const prev = select.value;
                 select.innerHTML = '<option value="">Select a vehicle...</option>';
@@ -231,6 +390,33 @@
                 });
                 if (prev) select.value = prev;
             });
+
+            // Identity Override Logic
+            const overrideInput = document.getElementById('targetIdOverride');
+            overrideInput.oninput = () => {
+                const override = overrideInput.value.trim();
+                const currentUid = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
+                
+                if (override) {
+                    selectedScooterId = override;
+                    document.getElementById('controls').style.display = 'block';
+                    document.getElementById('scooterIdLabel').innerText = override;
+                    document.getElementById('spoofStatus').style.display = 'block';
+                    // We don't subscribe to state for spoofing 
+                } else {
+                    selectedScooterId = currentUid;
+                    if (currentUid) selectScooter(currentUid);
+                    document.getElementById('spoofStatus').style.display = 'none';
+                }
+            };
+
+            document.getElementById('resetAuthBtn').onclick = () => {
+                if(confirm("This will clear your local identity and generate a new UID. Continue?")) {
+                    firebase.auth().signOut().then(() => {
+                        window.location.reload();
+                    });
+                }
+            };
         }
 
         async function selectScooter(id) {
@@ -249,6 +435,9 @@
             db.ref('scooters/' + id).on('value', snapshot => {
                 const data = snapshot.val();
                 if (!data) return;
+                
+                // Track current H3 from DB for cleanup logic
+                if (data.h3_index) lastH3 = data.h3_index;
                 
                 // Status Badge
                 const badge = document.getElementById('scooterStatus');
@@ -296,18 +485,55 @@
 
         function startHeartbeat() {
             if (heartbeatInterval) clearInterval(heartbeatInterval);
+            
             const run = async () => {
                 if (!selectedScooterId || !marker) return;
                 const pos = marker.getLatLng();
                 const bat = parseInt(document.getElementById('batterySlider').value);
+                const h3Index = h3.latLngToCell(pos.lat, pos.lng, 8);
+                
+                // Cleanup old index if moved
+                if (lastH3 && lastH3 !== h3Index) {
+                    console.log(`🧹 Cleaning up old H3 index: ${lastH3}`);
+                    db.ref(`geolocations/${lastH3}/${selectedScooterId}`).remove();
+                    db.ref(`geo_shards/${lastH3}/${selectedScooterId}`).remove();
+                }
+                lastH3 = h3Index;
+
+                // --- GEO-SHARDING DATA ---
+                const shardData = {
+                    id: selectedScooterId,
+                    lat: pos.lat,
+                    lng: pos.lng,
+                    bat: bat,
+                    s: 'av' // Status: "Available"
+                };
+
+                // BACK TO DIRECT WRITE for Spark (Free) plan compatibility
                 db.ref('scooters/' + selectedScooterId).update({
                     latitude: pos.lat,
                     longitude: pos.lng,
                     battery_percentage: bat,
+                    geohash: Geohash.encode(pos.lat, pos.lng, 9),
+                    h3_index: h3Index,
                     last_updated: Date.now()
-                }).catch(e => console.error("Update failed", e));
+                }).then(() => {
+                    console.log("📡 Position Synchronized (Direct)");
+                    // Ensure current index is set for legacy
+                    db.ref(`geolocations/${h3Index}/${selectedScooterId}`).set(true);
+                    // Write to new Geo-Shard
+                    db.ref(`geo_shards/${h3Index}/${selectedScooterId}`).set(shardData);
+                }).catch(e => {
+                    console.error("📡 Sync Error:", e);
+                    status("❌ Sync Error: " + e.message, true);
+                });
             };
-            const sec = parseInt(document.getElementById('freqSlider').value);
+
+            const mode = document.getElementById('powerMode').value;
+            let sec = 15;
+            if (mode === 'high') sec = 3;
+            if (mode === 'low') sec = 60;
+            
             heartbeatInterval = setInterval(run, sec * 1000);
             run();
         }
@@ -315,11 +541,50 @@
         // --- Events ---
         document.getElementById('scooterSelect').onchange = e => selectScooter(e.target.value);
         document.getElementById('batterySlider').oninput = e => document.getElementById('batteryVal').innerText = e.target.value + "%";
-        document.getElementById('freqSlider').oninput = e => {
-            document.getElementById('freqVal').innerText = e.target.value + "s";
+        
+        document.getElementById('powerMode').onchange = () => {
+            const mode = document.getElementById('powerMode').value;
+            status(`⚡ Power Mode: ${mode.toUpperCase()}`);
             startHeartbeat();
         };
-        document.getElementById('updateBtn').onclick = () => { status("📡 Manual broadcast sent"); startHeartbeat(); };
+
+        document.getElementById('updateBtn').onclick = () => { 
+            status("📡 Manual broadcast sent"); 
+            startHeartbeat(); 
+        };
+
+        document.getElementById('registerMeBtn').onclick = async () => {
+            if (!auth.currentUser) return;
+            const uid = auth.currentUser.uid;
+            status("🆕 Registering " + uid + "...");
+            
+            const pos = marker ? marker.getLatLng() : { lat: 6.864432, lng: 79.921155 };
+            const h3Idx = h3.latLngToCell(pos.lat, pos.lng, 8);
+            const shardData = { id: uid, lat: pos.lat, lng: pos.lng, bat: 100, s: 'av' };
+
+            db.ref('scooters/' + uid).set({
+                id: uid,
+                name: "Simulated Vehicle (" + uid.substring(0,5) + ")",
+                latitude: pos.lat,
+                longitude: pos.lng,
+                battery_percentage: 100,
+                is_locked: true,
+                is_available: true,
+                geohash: Geohash.encode(pos.lat, pos.lng, 9),
+                h3_index: h3Idx,
+                last_updated: Date.now()
+            }).then(async () => {
+                await db.ref(`geolocations/${h3Idx}/${uid}`).set(true);
+                await db.ref(`geo_shards/${h3Idx}/${uid}`).set(shardData);
+                lastH3 = h3Idx;
+                status("✅ Scooter Registered!");
+                loadFleetDropdown();
+                setTimeout(() => {
+                    document.getElementById('scooterSelect').value = uid;
+                    selectScooter(uid);
+                }, 500);
+            }).catch(e => status("❌ Registration Failed: " + e.message, true));
+        };
 
         initFleet();
     </script>

@@ -1,20 +1,36 @@
 {
   "rules": {
     "scooters": {
-      ".read": "auth != null",
-      ".write": false, 
-
+      ".read": "auth != null && (query.limitToFirst <= 50 || root.child('users').child(auth.uid).child('role').val() === 'admin')",
       ".indexOn": ["geohash"],
-      "$scooterId": {}
+      "$scooterId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || $scooterId === auth.uid || ((newData.child('latitude').val() == data.child('latitude').val() && newData.child('longitude').val() == data.child('longitude').val() && newData.child('geohash').val() == data.child('geohash').val()) && (data.child('current_ride_client_id').val() == null || data.child('current_ride_client_id').val() == auth.uid)))",
+        "latitude": { ".write": "$scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin'" },
+        "longitude": { ".write": "$scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin'" },
+        "geohash": { ".write": "$scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin'" },
+        "is_locked": { 
+          ".write": "$scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || data.parent().child('current_ride_client_id').val() == auth.uid || data.parent().child('current_ride_client_id').val() == null"
+        },
+        "is_available": { 
+          ".write": "$scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || data.parent().child('current_ride_client_id').val() == auth.uid || data.parent().child('current_ride_client_id').val() == null"
+        },
+        "current_ride_client_id": { 
+          ".write": "auth != null && ($scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.val() == null || data.val() == auth.uid))"
+        },
+        "last_updated": { ".write": "auth != null" }
+      }
     },
     "scooter_secure_data": {
-      ".read": false,
-      ".write": false
+      "$scooterId": {
+        ".read": "auth != null",
+        ".write": "auth != null && ($scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('current_ride_client_id').val() == auth.uid || data.child('current_ride_client_id').val() == null || !data.exists())"
+      }
     },
     "ride_history": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": false 
+        ".write": "auth != null && auth.uid === $uid" 
       }
     },
     "users": {
@@ -22,6 +38,30 @@
             ".read": "auth != null && auth.uid === $uid",
             ".write": "auth != null && auth.uid === $uid && (!data.exists() ? (!newData.hasChild('role') && !newData.hasChild('credits')) : ((!newData.hasChild('role') || newData.child('role').val() == data.child('role').val()) && (!newData.hasChild('credits') || newData.child('credits').val() == data.child('credits').val())))"
         }
+    },
+    "geolocations": {
+      ".read": "auth != null",
+      "$h3Index": {
+        "$scooterId": {
+          ".write": "auth != null && ($scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        }
+      }
+    },
+    "geo_shards": {
+      ".read": "auth != null",
+      "$h3Index": {
+        "$scooterId": {
+          ".write": "auth != null && ($scooterId === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        }
+      }
+    },
+    "geo_aggregates": {
+      ".read": "auth != null",
+      "$resolution": {
+        "$h3Cell": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'scooter')"
+        }
+      }
     },
     "internal": {
         "rate_limits": {

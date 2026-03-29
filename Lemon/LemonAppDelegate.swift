@@ -2,7 +2,7 @@
 //  LemonAppDelegate.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -11,13 +11,20 @@ import FirebaseAppCheck
 
 class LemonAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
   func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
-    #if targetEnvironment(simulator)
-      // Use the debug provider for simulator.
+    #if DEBUG
+      // Use the debug provider for development on both simulator AND physical devices.
+      let token = UserDefaults.standard.string(forKey: "FIRAAppCheckDebugToken") ?? "NOT_FOUND"
+      print("[AppCheck] Creating AppCheckDebugProvider. Active Token in UserDefaults: \(token)")
       return AppCheckDebugProvider(app: app)
     #else
-      // Use DeviceCheck or App Attest for real devices.
-      // DeviceCheck is often easier to set up initially.
-      return DeviceCheckProvider(app: app)
+      #if targetEnvironment(simulator)
+        print("[AppCheck] Creating AppCheckDebugProvider (Simulator)")
+        return AppCheckDebugProvider(app: app)
+      #else
+        // Use DeviceCheck or App Attest for production on real devices.
+        print("[AppCheck] Creating DeviceCheckProvider (Production/Real Device)")
+        return DeviceCheckProvider(app: app)
+      #endif
     #endif
   }
 }
@@ -34,6 +41,12 @@ class LemonAppDelegate: NSObject, UIApplicationDelegate {
         // Since many Firebase features need to be ready for the UI, we configure it here but we can wrap other heavy setup in bg.
         
         // Initialize App Check before FirebaseApp.configure()
+        #if DEBUG
+        // App Check Debug Provider initialized. 
+        // Note: Register the token printed by Firebase (I-GAC004001) in the Firebase Console.
+        print("[AppCheck] Debug Provider Factory initialized.")
+        #endif
+
         let providerFactory = LemonAppCheckProviderFactory()
         AppCheck.setAppCheckProviderFactory(providerFactory)
 

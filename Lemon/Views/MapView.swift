@@ -12,31 +12,51 @@ struct MapView: View {
     @Binding var selectedScooter: Scooter?
     @Binding var isGroupSelectionMode: Bool
     @Binding var selectedGroupScooters: Set<Scooter>
+    @ObservedObject var scooterViewModel: ScooterViewModel
     let scooters: [Scooter]
     
-    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
+    @State private var position: MapCameraPosition = .userLocation(fallback: .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
         span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
-    ))
+    )))
     
     var body: some View {
         Map(position: $position) {
-            ForEach(scooters) { scooter in
-                Annotation(scooter.displayName, coordinate: scooter.coordinate) {
-                    ScooterMarker(
-                        isSelected: isGroupSelectionMode ? selectedGroupScooters.contains(scooter) : selectedScooter == scooter,
-                        isGroupMode: isGroupSelectionMode
-                    )
-                    .onTapGesture {
-                        withAnimation(.spring()) {
-                            if isGroupSelectionMode {
-                                if selectedGroupScooters.contains(scooter) {
-                                    selectedGroupScooters.remove(scooter)
-                                } else if selectedGroupScooters.count < 5 {
-                                    selectedGroupScooters.insert(scooter)
+            if scooterViewModel.showAggregates {
+                // Render Aggregates (Clusters)
+                ForEach(scooterViewModel.aggregates) { aggregate in
+                    Annotation("Cluster", coordinate: aggregate.coordinate) {
+                        AggregateMarker(count: aggregate.count)
+                            .onTapGesture {
+                                // Zoom in when tapping a cluster
+                                withAnimation {
+                                    position = .region(MKCoordinateRegion(
+                                        center: aggregate.coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                    ))
                                 }
-                            } else {
-                                selectedScooter = scooter
+                            }
+                    }
+                }
+            } else {
+                // Render Individual Scooters
+                ForEach(scooters) { scooter in
+                    Annotation(scooter.displayName, coordinate: scooter.coordinate) {
+                        ScooterMarker(
+                            isSelected: isGroupSelectionMode ? selectedGroupScooters.contains(scooter) : selectedScooter == scooter,
+                            isGroupMode: isGroupSelectionMode
+                        )
+                        .onTapGesture {
+                            withAnimation(.spring()) {
+                                if isGroupSelectionMode {
+                                    if selectedGroupScooters.contains(scooter) {
+                                        selectedGroupScooters.remove(scooter)
+                                    } else if selectedGroupScooters.count < 5 {
+                                        selectedGroupScooters.insert(scooter)
+                                    }
+                                } else {
+                                    selectedScooter = scooter
+                                }
                             }
                         }
                     }
@@ -44,8 +64,27 @@ struct MapView: View {
             }
             UserAnnotation()
         }
-        // FIXED: Swapped 'emphasis' and 'pointsOfInterest' order
+        .onMapCameraChange { context in
+            scooterViewModel.updateZoomLevel(latitudeDelta: context.region.span.latitudeDelta)
+        }
         .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
+        .overlay(alignment: .bottomTrailing) {
+            Button(action: {
+                withAnimation {
+                    position = .userLocation(fallback: .automatic)
+                }
+            }) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.primary)
+                    .padding(12)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .shadow(radius: 4)
+            }
+            .padding(.bottom, 160) // Adjusted padding to sit above the bottom sheet area
+            .padding(.trailing, 16)
+        }
     }
 }
 
@@ -73,5 +112,25 @@ struct ScooterMarker: View {
             }
         }
         .scaleEffect(isSelected ? 1.2 : 1.0)
+    }
+}
+
+struct AggregateMarker: View {
+    let count: Int
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.lemonPrimary)
+                .frame(width: 40, height: 40)
+                .shadow(radius: 5)
+                .overlay(
+                    Circle().stroke(Color.white, lineWidth: 2)
+                )
+            
+            Text("\(count)")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.black)
+        }
     }
 }

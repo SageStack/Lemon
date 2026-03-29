@@ -2,7 +2,7 @@
 //  SlowZoneManager.swift
 //  Lemon
 //
-//  Created by Antigravity on 05/02/2026.
+//  Created by Shaluka Hewapatha on 05/02/2026.
 //
 
 import Foundation

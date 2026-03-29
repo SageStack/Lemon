@@ -2,11 +2,12 @@
 //  ScanningView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
 import AVFoundation
+import CoreLocation
 
 struct ScanningView: View {
     @Binding var isScanning: Bool

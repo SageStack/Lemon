@@ -51,6 +51,12 @@
             ReferencedContainer = "container:Lemon.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "-AppCheckDebugToken 779638C3-B16F-4A18-9F99-F9BE1A40B40E"
+            isEnabled = "YES">
+         </CommandLineArgument>
+      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

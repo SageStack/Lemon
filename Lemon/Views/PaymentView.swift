@@ -2,7 +2,7 @@
 //  PaymentView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -82,6 +82,9 @@ struct PaymentView: View {
                     HStack {
                         Image(systemName: "creditcard.fill")
                             .foregroundColor(.lemonPrimary)
+                            .padding(8)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
                         Text("•••• 4242")
                             .font(.system(size: 16, weight: .medium, design: .monospaced))
                         Spacer()

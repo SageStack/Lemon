@@ -2,7 +2,7 @@
 //  ProfileView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -19,9 +19,9 @@ struct ProfileView: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .padding(12)
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.lemonGlassBackground)
                             .clipShape(Circle())
                     }
                     Spacer()
@@ -58,13 +58,13 @@ struct InfoRow: View {
         HStack {
             Text(label)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(.secondary)
             Spacer()
             Text(value)
                 .font(.system(size: 16, weight: .medium))
         }
         .padding()
-        .background(Color.white.opacity(0.05))
+        .background(Color.lemonCardBackground)
         .cornerRadius(12)
     }
 }

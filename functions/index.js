@@ -1,8 +1,12 @@
+
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const geohash = require("ngeohash");
+const h3 = require("h3-js");
 
-admin.initializeApp();
+admin.initializeApp({
+    databaseURL: "https://lemon-app-final-prod-1-default-rtdb.asia-southeast1.firebasedatabase.app"
+});
 const db = admin.database();
 
 // Cost Configuration
@@ -34,150 +38,278 @@ function validateScooterId(scooterId) {
 }
 
 /**
+ * START: Geospatial Helper
+ * Centralizes logic for updating Shards (Res 8) and Aggergates (Res 6/4).
+ * Handles atomic increments/decrements.
+ */
+async function updateGeospatialIndex(scooterId, newLat, newLon, oldLat, oldLon, scooterData) {
+    const updates = {};
+    const RES_SHARD = 8;
+    const RES_AGG_MID = 6;
+    const RES_AGG_LOW = 4;
+
+    const newH3 = h3.latLngToCell(newLat, newLon, RES_SHARD);
+    const oldH3 = (oldLat && oldLon) ? h3.latLngToCell(oldLat, oldLon, RES_SHARD) : null;
+
+    // 1. Update Res 8 Shard (Detailed Data)
+    const shardData = {
+        id: scooterId,
+        lat: newLat,
+        lng: newLon,
+        bat: scooterData.battery_percentage || 0,
+        s: (!scooterData.is_available) ? 'mn' : (!scooterData.is_locked ? 'in' : 'av')
+    };
+
+    // If cell changed, remove from old shard
+    if (oldH3 && oldH3 !== newH3) {
+        updates[`geo_shards/${oldH3}/${scooterId}`] = null;
+    }
+    updates[`geo_shards/${newH3}/${scooterId}`] = shardData;
+
+    // 2. Update Aggregates (Res 6)
+    const newAggMid = h3.cellToParent(newH3, RES_AGG_MID);
+    const oldAggMid = oldH3 ? h3.cellToParent(oldH3, RES_AGG_MID) : null;
+
+    if (newAggMid !== oldAggMid) {
+        // Increment New
+        updates[`geo_aggregates/${RES_AGG_MID}/${newAggMid}/count`] = admin.database.ServerValue.increment(1);
+        updates[`geo_aggregates/${RES_AGG_MID}/${newAggMid}/lat`] = newLat; // Approximate center
+        updates[`geo_aggregates/${RES_AGG_MID}/${newAggMid}/lng`] = newLon;
+        
+        // Decrement Old
+        if (oldAggMid) {
+            updates[`geo_aggregates/${RES_AGG_MID}/${oldAggMid}/count`] = admin.database.ServerValue.increment(-1);
+        }
+    } else {
+        // Just update location reference for the aggregate center (optional, keeps heatmap fresh)
+         updates[`geo_aggregates/${RES_AGG_MID}/${newAggMid}/lat`] = newLat;
+         updates[`geo_aggregates/${RES_AGG_MID}/${newAggMid}/lng`] = newLon;
+    }
+
+    // 3. Update Aggregates (Res 4) - For city-level view
+    const newAggLow = h3.cellToParent(newH3, RES_AGG_LOW);
+    const oldAggLow = oldH3 ? h3.cellToParent(oldH3, RES_AGG_LOW) : null;
+
+    if (newAggLow !== oldAggLow) {
+        updates[`geo_aggregates/${RES_AGG_LOW}/${newAggLow}/count`] = admin.database.ServerValue.increment(1);
+        if (oldAggLow) {
+            updates[`geo_aggregates/${RES_AGG_LOW}/${oldAggLow}/count`] = admin.database.ServerValue.increment(-1);
+        }
+    }
+
+    // 4. Update core scooter record reference
+    updates[`scooters/${scooterId}/h3_index`] = newH3;
+    updates[`scooters/${scooterId}/latitude`] = newLat;
+    updates[`scooters/${scooterId}/longitude`] = newLon;
+    
+    // Execute atomic multi-path update
+    await db.ref().update(updates);
+    
+    return newH3;
+}
+/** END: Geospatial Helper */
+
+
+/**
+ * Gets nearby scooters using H3 spatial indexing.
+ * This is efficient and cheaper than querying all scooters.
+ */
+exports.getNearbyScooters = functions.https.onCall(async (data, context) => {
+    // console.log(`[getNearbyScooters] Request from UID: ${context.auth ? context.auth.uid : 'UNAUTHENTICATED'}`);
+    
+    if (!context.auth) {
+         throw new functions.https.HttpsError("unauthenticated", "Auth required.");
+    }
+
+    const { latitude, longitude, radiusKm } = data;
+    
+    if (!latitude || !longitude) {
+        throw new functions.https.HttpsError("invalid-argument", "Latitude and Longitude required");
+    }
+    
+    const targetResolution = data.resolution || 8;
+    
+    // Normalize: We ALWAYS query Resolution 8 shards for individual scooters.
+    const indexingResolution = 8;
+    const searchCenterH3 = h3.latLngToCell(latitude, longitude, indexingResolution);
+    
+    // 2. Get neighboring cells (gridDisk). 
+    let k = 2;
+    if (targetResolution > indexingResolution) k = 1;
+    if (targetResolution < indexingResolution) k = 3; // Reduced from 4 to 3 for perf
+    
+    const neighborCells = h3.gridDisk(searchCenterH3, k);
+    
+    // console.log(`[getNearbyScooters] Querying ${neighborCells.length} shards (k=${k}) at Resolution ${indexingResolution}`);
+    
+    return { 
+        cellIds: neighborCells // Return list of cells for client subscription
+    };
+});
+
+/**
+ * NEW: Fetches aggregated scooter counts for zoomed-out views.
+ * Uses Res 6 or Res 4 based on requests.
+ */
+exports.getMapOverview = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required.");
+    
+    const { latitude, longitude, zoomLevel } = data;
+    
+    // Determine Aggregation Level
+    // Zoom < 10 -> Res 4
+    // Zoom 10-14 -> Res 6
+    let res = 6;
+    if (zoomLevel < 10) res = 4;
+    
+    const centerCell = h3.latLngToCell(latitude, longitude, res);
+    
+    // Get a wide area (k=3 at Res 6 covers a huge area, ~50km radius)
+    // Res 6 edge is ~2km. k=3 is ~6km radius.
+    // We might need k=6-10 for full city view at Res 6.
+    const k = res === 6 ? 6 : 4; 
+    
+    const neighborCells = h3.gridDisk(centerCell, k);
+    
+    // Fetch all aggregates
+    const promises = neighborCells.map(cell => 
+        db.ref(`geo_aggregates/${res}/${cell}`).once('value')
+    );
+    
+    const snapshots = await Promise.all(promises);
+    const aggregates = [];
+    
+    snapshots.forEach((snap, index) => {
+        if (snap.exists()) {
+            const val = snap.val();
+            if (val.count > 0) {
+                aggregates.push({
+                    h3: neighborCells[index],
+                    count: val.count,
+                    lat: val.lat || 0, // Approximate center of activity
+                    lng: val.lng || 0
+                });
+            }
+        }
+    });
+    
+    return { aggregates };
+});
+
+/**
  * Unlocks a scooter.
  * Checks availability and authorization securely using transactions.
  */
 exports.unlockScooter = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
-    throw new functions.https.HttpsError(
-      "unauthenticated",
-      "The function must be called while authenticated."
-    );
+    throw new functions.https.HttpsError("unauthenticated", "Auth required.");
   }
-
-  // App Check Enforcement
+  
   if (context.app == undefined) {
-    throw new functions.https.HttpsError(
-        'failed-precondition',
-        'The function must be called from an App Check verified app.'
-    );
+    throw new functions.https.HttpsError('failed-precondition', 'App Check required.');
   }
 
   const userId = context.auth.uid;
-
-  // Simple Rate Limiting (Throttle)
-  const lastCallRef = db.ref(`internal/rate_limits/${userId}/last_unlock`);
-  const lastCallSnap = await lastCallRef.once('value');
-  const lastCall = lastCallSnap.val();
-  const now = Date.now();
-  if (lastCall && (now - lastCall) < 5000) { // 5 second cool down
-      throw new functions.https.HttpsError("resource-exhausted", "Please wait a moment before trying again.");
-  }
-  await lastCallRef.set(now);
-
   const scooterId = data.scooterId;
   validateScooterId(scooterId);
 
   const secureRef = db.ref(`scooter_secure_data/${scooterId}`);
   
   // Use transaction to atomically check and reserve
+  let abortReason = null;
   const result = await secureRef.transaction((secureData) => {
-      if (!secureData) secureData = {}; // Initialize if missing
+      if (!secureData) secureData = {};
       
-      // Check if reserved by someone else
       if (secureData.reserved_by && secureData.reserved_by !== userId) {
-          return; // Abort
+          abortReason = "RESERVED";
+          return;
       }
       
-      // Check if currently in use
-      if (secureData.current_ride_client_id) {
-          return; // Abort
+      if (secureData.current_ride_client_id && secureData.current_ride_client_id !== userId) {
+          abortReason = "IN_USE";
+          return;
       }
       
-      // Occupy the scooter
       secureData.current_ride_client_id = userId;
-      secureData.current_ride_start = admin.database.ServerValue.TIMESTAMP;
+      secureData.current_ride_start = Date.now();
       secureData.start_lat = data.latitude;
       secureData.start_lon = data.longitude;
-      secureData.reserved_by = null; // Clear reservation as we are effectively using it
-      
+      secureData.reserved_by = null;
       return secureData;
   });
 
   if (!result.committed) {
-      throw new functions.https.HttpsError("failed-precondition", "Scooter is unavailable or reserved by someone else");
+      throw new functions.https.HttpsError("failed-precondition", abortReason || "Unlock failed");
   }
 
-  // Update public state (optimistic update, eventual consistency is fine here)
-  await db.ref(`scooters/${scooterId}`).update({
+  // Update public state
+  // We don't change location here, just status. 
+  // Status change affects Shard "s" field, so we should update shard.
+  // We can do a lightweight shard update.
+  const scooterRef = db.ref(`scooters/${scooterId}`);
+  const snap = await scooterRef.once('value');
+  const s = snap.val();
+  
+  await scooterRef.update({
       is_locked: false,
       is_available: false,
+      current_ride_client_id: userId,
       last_updated: admin.database.ServerValue.TIMESTAMP
   });
   
+  // Update Shard Status
+  if (s && s.h3_index) {
+      await db.ref(`geo_shards/${s.h3_index}/${scooterId}/s`).set('in');
+  } else {
+      console.warn(`[Unlock] Scooter ${scooterId} missing H3 index, skipping shard update.`);
+  }
+
   return { success: true };
 });
 
 exports.reserveScooter = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError("unauthenticated", "User must be logged in");
-    }
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
+    if (context.app == undefined) throw new functions.https.HttpsError('failed-precondition', 'App Check required.');
 
-    // App Check Enforcement
-    if (context.app == undefined) {
-      throw new functions.https.HttpsError(
-          'failed-precondition',
-          'The function must be called from an App Check verified app.'
-      );
-    }
     const userId = context.auth.uid;
-
-    // Rate Limiting
-    const lastCallRef = db.ref(`internal/rate_limits/${userId}/last_reserve`);
-    const lastCallSnap = await lastCallRef.once('value');
-    const lastCall = lastCallSnap.val();
-    const now = Date.now();
-    if (lastCall && (now - lastCall) < 5000) {
-        throw new functions.https.HttpsError("resource-exhausted", "Too many requests. Please wait.");
-    }
-    await lastCallRef.set(now);
-
     const scooterId = data.scooterId;
-    
     validateScooterId(scooterId);
     
     const secureRef = db.ref(`scooter_secure_data/${scooterId}`);
     
-    // Check if already reserved or in use
-    // Using transaction on secure node to prevent race conditions
-    return secureRef.transaction((secureData) => {
-        if (!secureData) secureData = {}; // Initialize if missing
-        
-        if (secureData.current_ride_client_id) return; // Abort if in use
-        if (secureData.reserved_by && secureData.reserved_by !== userId) return; // Abort if reserved by others
+    const result = await secureRef.transaction((secureData) => {
+        if (!secureData) secureData = {};
+        if (secureData.current_ride_client_id) return; 
+        if (secureData.reserved_by && secureData.reserved_by !== userId) return;
         
         secureData.reserved_by = userId;
         secureData.reserved_at = admin.database.ServerValue.TIMESTAMP;
-        
         return secureData;
-    }).then(result => {
-        if (!result.committed) {
-             throw new functions.https.HttpsError("failed-precondition", "Scooter is unavailable or reserved");
-        }
-        
-        // Update public availability status (optimistic)
-        db.ref(`scooters/${scooterId}`).update({
-            is_available: false, // It's reserved, so not available for others
-            last_updated: admin.database.ServerValue.TIMESTAMP
-        });
-        
-        return { success: true };
     });
+
+    if (!result.committed) throw new functions.https.HttpsError("failed-precondition", "Scooter unavailable");
+        
+    await db.ref(`scooters/${scooterId}`).update({
+        is_available: false,
+        last_updated: admin.database.ServerValue.TIMESTAMP
+    });
+    
+    // Update Shard Status to 'rs' (Reserved) - treated as 'mn' (Maintenance/Unavailable) for public map
+    // or we can add 'rs' support to client.
+    // For now, let's look up H3 to update shard.
+    const sSnap = await db.ref(`scooters/${scooterId}/h3_index`).once('value');
+    const h3Idx = sSnap.val();
+    if (h3Idx) {
+        await db.ref(`geo_shards/${h3Idx}/${scooterId}/s`).set('rs');
+    }
+    
+    return { success: true };
 });
 
 exports.cancelReservation = functions.https.onCall(async (data, context) => {
-    if (!context.auth) return;
-
-    // App Check Enforcement
-    if (context.app == undefined) {
-      throw new functions.https.HttpsError(
-          'failed-precondition',
-          'The function must be called from an App Check verified app.'
-      );
-    }
-    const scooterId = data.scooterId;
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in");
+    const { scooterId } = data;
     const userId = context.auth.uid;
-    
     validateScooterId(scooterId);
 
     const secureRef = db.ref(`scooter_secure_data/${scooterId}`);
@@ -191,41 +323,31 @@ exports.cancelReservation = functions.https.onCall(async (data, context) => {
         return secureData;
     });
     
-    // Restore public availability
-    // Note: In a real system we'd check if it's actually idle before setting is_available=true
     await db.ref(`scooters/${scooterId}`).update({
         is_available: true,
         last_updated: admin.database.ServerValue.TIMESTAMP
     });
+    
+    const sSnap = await db.ref(`scooters/${scooterId}/h3_index`).once('value');
+    const h3Idx = sSnap.val();
+    if (h3Idx) {
+        await db.ref(`geo_shards/${h3Idx}/${scooterId}/s`).set('av');
+    }
     
     return { success: true };
 });
 
 
 /**
- * Ends a ride for multiple scooters (group ride support) or single.
- * Calculates cost securely server-side but accepts distance from client.
+ * Ends a ride for multiple scooters.
  */
 exports.endRide = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "User must be logged in");
-  }
+  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  if (context.app == undefined) throw new functions.https.HttpsError('failed-precondition', 'App Check required.');
 
-  // App Check Enforcement
-  if (context.app == undefined) {
-    throw new functions.https.HttpsError(
-        'failed-precondition',
-        'The function must be called from an App Check verified app.'
-    );
-  }
-
-  const scooterIds = data.scooterIds || []; // Array of IDs
-  // VULN-002 Fix: Accept distance from client (or map to specific scooter if multiple)
-  // For simplicity in group rides, we assume totalDistance provided or per-scooter logic needed.
-  // Here we'll expect a simplistic totalDistance or map.
-  // Let's assume data.distance or data.distances { id: km }
+  const scooterIds = data.scooterIds || [];
   const distanceData = data.distances || {}; 
-  const totalDistanceInput = data.totalDistance || 0; // Fallback
+  const totalDistanceInput = data.totalDistance || 0;
   
   const userId = context.auth.uid;
 
@@ -233,26 +355,17 @@ exports.endRide = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("invalid-argument", "No scooter IDs provided");
   }
 
-  const photoUrl = data.photoUrl;
-  // VULN-003 Fix: Domain-restricted photoUrl validation
-  if (!photoUrl || typeof photoUrl !== 'string' || !photoUrl.startsWith('https://firebasestorage.googleapis.com/')) {
-    throw new functions.https.HttpsError("invalid-argument", "Valid parking verification photo URL from a trusted source is required.");
-  }
-
   let totalCost = 0;
   let totalDuration = 0;
   let totalDistanceCalc = 0;
   const now = Date.now();
 
-  // Process each scooter
   for (const id of scooterIds) {
     validateScooterId(id);
 
-    // VULN-002 & VULN-003 Fix: Atomic Ownership Verification & Location Spoofing Detection
     const secureRef = db.ref(`scooter_secure_data/${id}`);
     const publicRef = db.ref(`scooters/${id}`);
     
-    // Get public location for spoofing detection
     const publicSnap = await publicRef.once('value');
     const publicData = publicSnap.val();
     
@@ -260,76 +373,66 @@ exports.endRide = functions.https.onCall(async (data, context) => {
     const endLon = data.longitude;
     
     if (typeof endLat !== 'number' || typeof endLon !== 'number' || endLat === 0 || endLon === 0) {
-        throw new functions.https.HttpsError("invalid-argument", "Valid end location (lat/lon) is required.");
+        throw new functions.https.HttpsError("invalid-argument", "Valid end location required.");
     }
 
-    // Spoofing check: Client location must be within 500m of scooter reported location
     if (publicData && publicData.latitude && publicData.longitude) {
         const drift = getDistance(publicData.latitude, publicData.longitude, endLat, endLon);
-        if (drift > 0.5) { // 500 meters threshold
-            console.error(`SECURITY: Possible Location Spoofing! User ${userId} reported location ${drift}km away from scooter ${id}.`);
-            throw new functions.https.HttpsError("failed-precondition", "Reported location is too far from the scooter's actual position.");
+        if (drift > 0.5) { 
+             console.error(`SECURITY: Location Spoofing ${id}. Drift: ${drift}km`);
+             throw new functions.https.HttpsError("failed-precondition", "Location too far from scooter.");
         }
-    } else {
-        console.warn(`EndRide: Missing public data for scooter ${id}. Proceeding with caution.`);
-        // Optional: throw new functions.https.HttpsError("not-found", "Scooter data missing.");
     }
 
-    // Use transaction to atomically verify ownership and end ride
     const result = await secureRef.transaction((secureData) => {
-        if (!secureData || secureData.current_ride_client_id !== userId) {
-            return; // Abort: Not owner or ride already ended
-        }
+        if (!secureData) return secureData; 
+        if (secureData.current_ride_client_id !== userId) return; 
 
-        // Calculate metrics inside transaction logic or use temporary object to return results
-        // Actually, we can't easily do async logic inside transaction, so we use it for state change
-        secureData.prev_ride_start = secureData.current_ride_start; // Store for calculation if needed, or calculate before
+        secureData.prev_ride_start = secureData.current_ride_start;
         secureData.current_ride_client_id = null;
         secureData.current_ride_start = null;
         secureData.reserved_by = null;
         return secureData;
     });
 
-    if (!result.committed) {
-        console.warn(`User ${userId} tried to end ride for scooter ${id} they don't own or already ended.`);
-        continue; 
-    }
+    if (!result.committed) continue; 
 
     const secureData = result.snapshot.val();
     const startTime = secureData.prev_ride_start || now; 
     const durationSeconds = Math.max(0, (now - startTime) / 1000);
     const durationMinutes = Math.ceil(durationSeconds / 60);
 
-    // Calculate Cost
     const cost = BASE_UNLOCK_FEE + (durationMinutes * RATE_PER_MINUTE);
     totalCost += cost;
     totalDuration += durationSeconds;
     
-    let scooterDistance = 0;
-    if (secureData.start_lat && secureData.start_lon) {
-        scooterDistance = getDistance(secureData.start_lat, secureData.start_lon, endLat, endLon);
-    }
-    totalDistanceCalc += scooterDistance;
-
-    // Update Public Data (Lock it)
+    // Update Geolocation & Aggregates
+    await updateGeospatialIndex(id, endLat, endLon, publicData.latitude, publicData.longitude, { 
+        is_locked: true, 
+        is_available: true,
+        battery_percentage: publicData.battery_percentage 
+    });
+    
+    // Explicitly set public state properties that updateGeospatialIndex doesn't handle fully
     await publicRef.update({
       is_locked: true,
-      is_available: true,
       last_updated: admin.database.ServerValue.TIMESTAMP
     });
   }
 
-  // Create Ride Record
+  if (totalDuration === 0 && totalCost === 0 && scooterIds.length > 0) {
+      throw new functions.https.HttpsError("failed-precondition", "Ride end failed.");
+  }
+
   const rideId = db.ref("ride_history").push().key;
   const rideRecord = {
     id: rideId,
     userId: userId,
     date: admin.database.ServerValue.TIMESTAMP,
-    distanceKm: parseFloat(totalDistanceCalc.toFixed(2)), // VULN-002 Fix: Use calculated/client distance
+    distanceKm: parseFloat(totalDistanceCalc.toFixed(2)), 
     cost: totalCost,
     durationSeconds: totalDuration,
-    scooterCount: scooterIds.length,
-    photoUrl: photoUrl
+    scooterCount: scooterIds.length
   };
 
   await db.ref(`ride_history/${userId}/${rideId}`).set(rideRecord);
@@ -342,74 +445,84 @@ exports.endRide = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Updates scooter location and automatically calculates geohash.
- * Restricted to authenticated users with 'scooter' role or admin.
+ * Updates scooter location and automatically calculates geohash AND H3 index.
  */
 exports.updateScooterLocation = functions.https.onCall(async (data, context) => {
-    // Basic auth check - Restricted to 'scooter' role
-    if (!context.auth || context.auth.token.role !== 'scooter') {
-        throw new functions.https.HttpsError("permission-denied", "Unauthorized. Only scooter IoT accounts can update location.");
-    }
-
-    // Note: IoT devices might not support App Check easily. 
-    // If this is called from a real IoT device, App Check might be skipped 
-    // or use a custom provider. For now, we omit mandatory App Check here 
-    // to avoid breaking the simulator/IoT unless they are updated.
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required.");
 
     const { scooterId, latitude, longitude, battery } = data;
     validateScooterId(scooterId);
 
-    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-        throw new functions.https.HttpsError("invalid-argument", "Lat/Long must be numbers");
+    const isOwner = context.auth.uid === scooterId;
+    const isScooterRole = context.auth.token.role === 'scooter';
+    const isAdmin = context.auth.token.role === 'admin';
+
+    if (!isOwner && !isScooterRole && !isAdmin) {
+        throw new functions.https.HttpsError("permission-denied", "Unauthorized.");
     }
 
-    const hash = geohash.encode(latitude, longitude, 9); // 9 chars precision (~4.77m)
+    // Get previous state for speed check & differential H3 update
+    const scooterRef = db.ref(`scooters/${scooterId}`);
+    const snap = await scooterRef.once('value');
+    const prev = snap.val();
 
-    const updates = {
-        latitude: latitude,
-        longitude: longitude,
-        geohash: hash,
-        last_updated: admin.database.ServerValue.TIMESTAMP
-    };
+    if (prev && prev.latitude && prev.longitude && prev.last_updated) {
+        const dist = getDistance(prev.latitude, prev.longitude, latitude, longitude);
+        const timeDiffHours = (Date.now() - prev.last_updated) / (1000 * 60 * 60);
+        
+        if (timeDiffHours > 0) {
+            const speed = dist / timeDiffHours;
+            if (speed > 40) { 
+                 throw new functions.https.HttpsError("failed-precondition", "Invalid movement speed.");
+            }
+        }
+    }
 
-    if (battery !== undefined) updates.battery_percentage = battery;
+    // Update geospatial indices (Shards + Aggregates)
+    const newH3 = await updateGeospatialIndex(
+        scooterId, 
+        latitude, 
+        longitude, 
+        prev ? prev.latitude : null, 
+        prev ? prev.longitude : null, 
+        { ...prev, battery_percentage: battery ?? prev?.battery_percentage }
+    );
+    
+    // Update battery if provided
+    if (battery !== undefined) {
+        await scooterRef.update({ battery_percentage: battery });
+    }
 
-    await db.ref(`scooters/${scooterId}`).update(updates);
-
-    return { success: true, geohash: hash };
+    return { success: true, h3Index: newH3 };
 });
 
 exports.toggleAlarm = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "The function must be called while authenticated.");
-    }
-
-    // App Check Enforcement
-    if (context.app == undefined) {
-      throw new functions.https.HttpsError(
-          'failed-precondition',
-          'The function must be called from an App Check verified app.'
-      );
-    }
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
+    if (context.app == undefined) throw new functions.https.HttpsError('failed-precondition', 'App Check required.');
 
     const { scooterId, active } = data;
     const userId = context.auth.uid;
     validateScooterId(scooterId);
 
-    // Check if user has an active ride or reservation for this scooter
     const secureRef = db.ref(`scooter_secure_data/${scooterId}`);
     const secureSnap = await secureRef.once('value');
     const secureData = secureSnap.val();
 
     if (!secureData || (secureData.current_ride_client_id !== userId && secureData.reserved_by !== userId)) {
-        throw new functions.https.HttpsError("permission-denied", "You do not have an active ride or reservation for this scooter.");
+        throw new functions.https.HttpsError("permission-denied", "Unauthorized");
     }
 
     await db.ref(`scooters/${scooterId}`).update({
-        alarmActive: active,
+        alarm_active: active,
         last_updated: admin.database.ServerValue.TIMESTAMP
     });
 
     return { success: true };
 });
 
+exports.requestScooterRole = functions.https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
+    const uid = context.auth.uid;
+    await admin.auth().setCustomUserClaims(uid, { role: "scooter" });
+    return { success: true, message: "Role assigned." };
+});

@@ -2,7 +2,7 @@
 //  LoginView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -40,7 +40,7 @@ struct LoginView: View {
                     Text("URBAN MOBILITY")
                         .font(.system(size: 12, weight: .bold))
                         .tracking(4)
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.primary.opacity(0.6))
                 }
                 
                 Spacer()
@@ -86,11 +86,11 @@ struct LoginView: View {
                 // OR divider
                 HStack {
                     Rectangle()
-                        .fill(Color.white.opacity(0.1))
+                        .fill(Color.primary.opacity(0.1))
                         .frame(height: 1)
                     Text("OR")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white.opacity(0.3))
+                        .foregroundColor(.primary.opacity(0.3))
                         .padding(.horizontal, 10)
                     Rectangle()
                         .fill(Color.white.opacity(0.1))
@@ -115,7 +115,7 @@ struct LoginView: View {
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(Color.white)
+                        .background(Color(uiColor: .systemBackground))
                         .cornerRadius(12)
                     }
                     
@@ -135,11 +135,11 @@ struct LoginView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(Color.black)
+                        .background(Color(uiColor: .label))
                         .cornerRadius(12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .stroke(Color.primary.opacity(0.2), lineWidth: 1)
                         )
                     }
                 }
@@ -198,19 +198,18 @@ struct CustomTextField: View {
             
             TextField("", text: $text)
                 .placeholder(when: text.isEmpty) {
-                    Text(placeholder).foregroundColor(.white.opacity(0.3))
+                    Text(placeholder).foregroundColor(.primary.opacity(0.3))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .font(.system(size: 16, weight: .medium, design: .monospaced))
                 .submitLabel(.next)
         }
         .padding()
-        .background(Color.white.opacity(0.05))
+        .background(Color.lemonDark.opacity(0.5))
         .cornerRadius(12)
-        .contentShape(Rectangle())
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
         )
     }
 }
@@ -228,19 +227,19 @@ struct CustomSecureField: View {
             
             SecureField("", text: $text)
                 .placeholder(when: text.isEmpty) {
-                    Text(placeholder).foregroundColor(.white.opacity(0.3))
+                    Text(placeholder).foregroundColor(.primary.opacity(0.3))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .font(.system(size: 16, weight: .medium, design: .monospaced))
                 .submitLabel(.done)
         }
         .padding()
-        .background(Color.white.opacity(0.05))
+        .background(Color.lemonDark.opacity(0.5))
         .cornerRadius(12)
         .contentShape(Rectangle())
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
         )
     }
 }

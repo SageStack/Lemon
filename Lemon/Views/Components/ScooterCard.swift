@@ -16,7 +16,7 @@ struct ScooterCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(scooter.displayName)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                     Text("\(scooter.pricePerMin) per minute")
                         .font(.caption)
                         .foregroundColor(.gray)
@@ -29,9 +29,9 @@ struct ScooterCard: View {
                         }
                     }) {
                         Image(systemName: (scooter.alarmActive ?? false) ? "bell.and.waves.left.and.right.fill" : "bell.fill")
-                            .foregroundColor((scooter.alarmActive ?? false) ? .lemonPrimary : .white)
+                            .foregroundColor((scooter.alarmActive ?? false) ? .lemonPrimary : .primary)
                             .padding(10)
-                            .background(Color.white.opacity(0.1))
+                            .background(Color.lemonGlassBackground)
                             .clipShape(Circle())
                     }
                     
@@ -54,10 +54,10 @@ struct ScooterCard: View {
                         Text("RESERVE")
                     }
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
-                    .background(Color.white.opacity(0.1))
+                    .background(Color.lemonGlassBackground)
                     .cornerRadius(15)
                 }
                 
@@ -67,11 +67,11 @@ struct ScooterCard: View {
             }
         }
         .padding(24)
-        .background(Color.lemonDark) // FIXED: Matches the extension name
+        .background(Color.lemonCardBackground)
         .cornerRadius(30)
         .overlay(
             RoundedRectangle(cornerRadius: 30)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Color.lemonSeparator, lineWidth: 1)
         )
         .padding(.horizontal)
     }

@@ -2,7 +2,7 @@
 //  AuthViewModel.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -32,7 +32,9 @@ class AuthViewModel: NSObject, ObservableObject {
     
     override init() {
         super.init()
-        print("Auth: AuthViewModel Initialized")
+        // Initialize from UserDefaults for the first frame
+        self.isAuthenticated = UserDefaults.standard.bool(forKey: "isAuthenticated")
+        print("Auth: AuthViewModel Initialized (Previously Authenticated: \(self.isAuthenticated))")
         setupAuthStateListener()
     }
     
@@ -264,7 +266,6 @@ class AuthViewModel: NSObject, ObservableObject {
         if let user = user {
             print("Auth: Updating state to AUTHENTICATED")
             self.isAuthenticated = true
-            self.isAuthenticated = true
             self.currentUser = User(
                 id: user.uid,
                 name: user.displayName ?? "User",
@@ -273,9 +274,11 @@ class AuthViewModel: NSObject, ObservableObject {
         } else {
             print("Auth: Updating state to UNAUTHENTICATED")
             self.isAuthenticated = false
-            self.isAuthenticated = false
             self.currentUser = nil
         }
+        
+        // Sync with UserDefaults for RootView gate
+        UserDefaults.standard.set(self.isAuthenticated, forKey: "isAuthenticated")
     }
     
     private func isValidEmail(_ email: String) -> Bool {

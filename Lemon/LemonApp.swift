@@ -11,19 +11,18 @@ import FirebaseCore
 @main
 struct LemonApp: App {
     @UIApplicationDelegateAdaptor(LemonAppDelegate.self) var delegate
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @StateObject private var authViewModel = AuthViewModel()
     
     init() {
-        // Customize Global appearance
-        // Moving UI appearance setup here is fine, or can also go to AppDelegate
-        UIView.appearance().overrideUserInterfaceStyle = .dark
+        // Global appearance customization can go here
     }
-    
-    @StateObject private var authViewModel = AuthViewModel()
     
     var body: some Scene {
         WindowGroup {
             RootView()
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(themeManager.selection.colorScheme)
+                .environmentObject(themeManager)
                 .environmentObject(authViewModel)
                 .onOpenURL { url in
                     authViewModel.handle(url: url)

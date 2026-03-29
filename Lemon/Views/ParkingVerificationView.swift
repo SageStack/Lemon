@@ -1,248 +1,269 @@
+//
+//  ParkingVerificationView.swift
+//  Lemon
+//
+//  Created by Antigravity on 11/02/2026.
+//
+
 import SwiftUI
-import AVFoundation
-import FirebaseStorage
+import UIKit
+import CoreLocation
 
 struct ParkingVerificationView: View {
     @Binding var isVisible: Bool
     @Binding var isActiveRide: Bool
     let scooterIds: [String]
-    let rideData: (duration: Int, cost: Double, count: Int, distance: Double)?
+    let rideData: TripData?
     let userId: String?
     
+    @State private var showingCamera = true
+    @State private var capturedImage: UIImage?
+    @State private var isProcessing = false
+    @State private var validationResult: ParkingValidationService.ValidationResult?
+    @State private var error: String?
     @State private var currentScooterIndex = 0
-    @State private var isCaptured = false
-    @State private var shutterEffect = false
-    @State private var sessionRunning = true
     
-    // Logic fault: Check for empty IDs
-    @State private var uploadedPhotoUrl: String?
-    @State private var isUploading = false
+    private var isLastScooter: Bool {
+        scooterIds.isEmpty || currentScooterIndex >= scooterIds.count - 1
+    }
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.lemonBackground.ignoresSafeArea()
             
-            VStack(spacing: 30) {
-                // Header
-                HStack {
-                    Button(action: { isVisible = false }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
-                            .padding(12)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    Spacer()
-                }
-                .padding()
-                
-                VStack(spacing: 8) {
-                    Text(isCaptured ? "PHOTO CAPTURED" : "PARKING VERIFICATION")
-                        .font(.system(size: 20, weight: .black, design: .monospaced))
+            if isProcessing {
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.lemonPrimary)
+                    Text("VALIDATING PARKING...")
+                        .font(.system(size: 14, weight: .black))
                         .foregroundColor(.lemonPrimary)
-                    
-                    if scooterIds.count > 1 {
-                        Text("Scooter \(currentScooterIndex + 1) of \(scooterIds.count)")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
                 }
-                
-                Text(isCaptured ? (isUploading ? "Uploading verification..." : "Great! Verification uploaded.") : "Please take a photo of scooter \(scooterIds.count > 0 ? (scooterIds[safe: currentScooterIndex] ?? "selected") : "selected") parked correctly.")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
+            } else if let errorMessage = error {
+                VStack(spacing: 30) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.red)
+                    
+                    VStack(spacing: 12) {
+                        Text("ERROR OCCURRED")
+                            .font(.system(size: 24, weight: .black))
+                        
+                        Text(errorMessage)
+                            .font(.system(size: 16))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    
+                    Button(action: {
+                        finishRide()
+                    }) {
+                        Text("RETRY FINISH RIDE")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 55)
+                            .background(Color.lemonPrimary)
+                            .cornerRadius(15)
+                    }
                     .padding(.horizontal, 40)
-                
-                Spacer()
-                
-                // Camera Viewfinder
-                ZStack {
-                    CameraCaptureView(isSessionRunning: $sessionRunning)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(3/4, contentMode: .fit)
-                        .cornerRadius(20)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 2)
-                        )
                     
-                    if shutterEffect {
-                        Color.white
-                            .cornerRadius(20)
-                            .transition(.opacity)
-                    }
-                    
-                    if isCaptured {
-                        ZStack {
-                            Color.black.opacity(0.4)
-                            if isUploading {
-                                ProgressView()
-                                    .tint(.lemonPrimary)
-                                    .scaleEffect(1.5)
-                            } else {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .resizable()
-                                    .frame(width: 80, height: 80)
-                                    .foregroundColor(.lemonPrimary)
-                            }
-                        }
-                        .cornerRadius(20)
+                    Button(action: {
+                        self.error = nil
+                        self.validationResult = nil
+                        self.capturedImage = nil
+                        self.showingCamera = true
+                    }) {
+                        Text("CANCEL")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding()
                     }
                 }
-                .padding(.horizontal, 30)
-                
-                Spacer()
-                
-                if isCaptured && !isUploading {
-                    if isLastScooter {
+            } else if let result = validationResult {
+                VStack(spacing: 30) {
+                    Image(systemName: result.isPass ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(result.isPass ? .green : .red)
+                    
+                    VStack(spacing: 12) {
+                        Text(result.isPass ? "PARKING APPROVED" : "IMPROPER PARKING")
+                            .font(.system(size: 24, weight: .black))
+                        
+                        Text(result.message)
+                            .font(.system(size: 16))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    
+                    Spacer().frame(height: 20)
+                    
+                    if result.isPass {
                         Button(action: {
-                            Task {
-                                do {
-                                    guard let photoUrl = uploadedPhotoUrl else { return }
-                                    // Secure Backend Call: End Ride & Calculate Cost
-                                    let loc = LocationManager.shared.userLocation?.coordinate
-                                    try await ScooterService.shared.endRide(scooterIds: scooterIds, latitude: loc?.latitude ?? 0, longitude: loc?.longitude ?? 0, photoUrl: photoUrl)
-                                    
-                                    await MainActor.run {
-                                        withAnimation {
-                                            isActiveRide = false
-                                            isVisible = false
-                                        }
-                                    }
-                                } catch {
-                                    print("Lock failed: \(error)")
-                                }
-                            }
+                            finishRide()
                         }) {
                             Text("FINISH RIDE")
-                                .font(.system(size: 18, weight: .black))
+                                .font(.system(size: 16, weight: .black))
                                 .foregroundColor(.black)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 60)
+                                .frame(height: 55)
                                 .background(Color.lemonPrimary)
                                 .cornerRadius(15)
                         }
-                        .padding(.horizontal, 30)
+                        .padding(.horizontal, 40)
                     } else {
                         Button(action: {
-                            withAnimation {
-                                currentScooterIndex += 1
-                                isCaptured = false
-                                uploadedPhotoUrl = nil
-                                sessionRunning = true
-                            }
+                            validationResult = nil
+                            capturedImage = nil
+                            showingCamera = true
                         }) {
-                            Text("NEXT SCOOTER")
-                                .font(.system(size: 18, weight: .black))
-                                .foregroundColor(.black)
+                            Text("RETAKE PHOTO")
+                                .font(.system(size: 16, weight: .black))
+                                .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 60)
-                                .background(Color.white)
+                                .frame(height: 55)
+                                .background(Color.white.opacity(0.1))
                                 .cornerRadius(15)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 15)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
                         }
-                        .padding(.horizontal, 30)
+                        .padding(.horizontal, 40)
                     }
-                } else if !isCaptured {
+                }
+                .transition(.opacity)
+            } else if let image = capturedImage {
+                VStack(spacing: 20) {
+                    Text("Please take a photo of \(scooterIds.count > 1 ? "scooter \(currentScooterIndex + 1) " : "the scooter ")parked correctly.")
+                        .font(.custom("Outfit-Bold", size: 18))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .cornerRadius(20)
+                        .padding()
+                    
                     Button(action: {
-                        capturePhoto()
+                        validateImage(image)
                     }) {
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white, lineWidth: 4)
-                                .frame(width: 80, height: 80)
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 65, height: 65)
-                        }
+                        Text("VERIFY PARKING")
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 55)
+                            .background(Color.lemonPrimary)
+                            .cornerRadius(15)
+                    }
+                    .padding(.horizontal, 40)
+                    
+                    Button(action: {
+                        capturedImage = nil
+                        showingCamera = true
+                    }) {
+                        Text("RETAKE")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding()
                     }
                 }
-                
-                Spacer()
             }
         }
-        .onDisappear {
-            sessionRunning = false
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraPicker(image: $capturedImage)
+                .ignoresSafeArea()
         }
     }
     
-    private func capturePhoto() {
-        withAnimation(.easeInOut(duration: 0.1)) {
-            shutterEffect = true
-        }
-        
-        // Real Capture
-        let delegate = PhotoCaptureDelegate { result in
-            switch result {
-            case .success(let data):
-                uploadPhoto(data: data)
-            case .failure(let error):
-                print("Capture failed: \(error)")
-            }
-        }
-        
-        CameraManager.shared.capturePhoto(delegate: delegate)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeInOut(duration: 0.1)) {
-                shutterEffect = false
-            }
-            
-            AudioServicesPlaySystemSound(1108) // Shutter sound
-            withAnimation(.spring()) {
-                isCaptured = true
-                sessionRunning = false
+    private func validateImage(_ image: UIImage) {
+        isProcessing = true
+        Task {
+            let result = await ParkingValidationService.shared.validateParking(image: image)
+            await MainActor.run {
+                withAnimation {
+                    self.validationResult = result
+                    self.isProcessing = false
+                }
             }
         }
     }
     
-    private func uploadPhoto(data: Data) {
-        isUploading = true
-        let storageRef = FirebaseManager.shared.storage.reference().child("parking_verification/\(userId ?? "unknown")/\(UUID().uuidString).jpg")
+    private func finishRide() {
+        guard let data = rideData else { 
+            print("ParkingVerification: ❌ Missing ride data, cannot finish ride.")
+            self.error = "Error: Missing ride data. Please contact support."
+            return 
+        }
         
-        storageRef.putData(data, metadata: nil) { metadata, error in
-            if let error = error {
-                print("Upload failed: \(error)")
-                isUploading = false
-                return
-            }
-            
-            storageRef.downloadURL { url, error in
-                isUploading = false
-                if let url = url {
-                    self.uploadedPhotoUrl = url.absoluteString
+        isProcessing = true
+        self.error = nil
+        
+        Task {
+            do {
+                try await ScooterService.shared.endRide(
+                    scooterIds: scooterIds,
+                    latitude: LocationManager.shared.userLocation?.coordinate.latitude ?? 0,
+                    longitude: LocationManager.shared.userLocation?.coordinate.longitude ?? 0,
+                    totalDistanceKm: data.distance
+                )
+                await MainActor.run {
+                    self.isProcessing = false
+                    withAnimation {
+                        isActiveRide = false
+                        isVisible = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isProcessing = false
+                    self.error = error.localizedDescription
+                    print("ParkingVerification: ❌ End Ride Failed: \(error.localizedDescription)")
                 }
             }
         }
     }
 }
 
-class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    private let completion: (Result<Data, Error>) -> Void
+// Simple Camera Picker wrapper
+struct CameraPicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.presentationMode) var presentationMode
     
-    init(completion: @escaping (Result<Data, Error>) -> Void) {
-        self.completion = completion
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .camera
+        } else {
+            picker.sourceType = .photoLibrary
+        }
+        return picker
     }
     
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            completion(.failure(error))
-            return
-        }
-        
-        guard let imageData = photo.fileDataRepresentation() else {
-            completion(.failure(NSError(domain: "PhotoCapture", code: -1, userInfo: [NSLocalizedDescriptionKey: "No image data"])))
-            return
-        }
-        
-        completion(.success(imageData))
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
     }
-}
-}
-
-// Helper extension for safe array indexing
-extension Array {
-    subscript(safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
+    
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: CameraPicker
+        
+        init(_ parent: CameraPicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let uiImage = info[.originalImage] as? UIImage {
+                parent.image = uiImage
+            }
+            parent.presentationMode.wrappedValue.dismiss()
+        }
     }
 }

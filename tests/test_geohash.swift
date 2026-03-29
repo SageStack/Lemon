@@ -1,13 +1,6 @@
-//
-//  GeohashHelper.swift
-//  Lemon
-//
-//  Created by Shaluka Hewapatha on 06/02/2026.
-//
-
 import Foundation
-import CoreLocation
 
+// Copying GeohashHelper for standalone testing
 struct GeohashHelper {
     private static let base32 = Array("0123456789bcdefghjkmnpqrstuvwxyz")
     
@@ -50,3 +43,28 @@ struct GeohashHelper {
         return geohash
     }
 }
+
+// Test cases
+func testGeohash() {
+    print("Running Geohash Tests...")
+    
+    // London
+    let london = GeohashHelper.encode(latitude: 51.5074, longitude: -0.1278, precision: 9)
+    print("London (51.5074, -0.1278): \(london)")
+    assert(london.startsWith("gcpvj"), "London geohash should start with gcpvj")
+    
+    // New York
+    let ny = GeohashHelper.encode(latitude: 40.7128, longitude: -74.0060, precision: 9)
+    print("New York (40.7128, -74.0060): \(ny)")
+    assert(ny.startsWith("dr5r"), "NY geohash should start with dr5r")
+    
+    print("✅ Geohash Tests Passed!")
+}
+
+extension String {
+    func startsWith(_ prefix: String) -> Bool {
+        return self.hasPrefix(prefix)
+    }
+}
+
+testGeohash()

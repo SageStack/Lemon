@@ -19,14 +19,25 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- REPLACE THIS WITH YOUR REVERSED CLIENT ID FROM GOOGLESERVICE-INFO.PLIST -->
 				<string>com.googleusercontent.apps.22651612800-ca1t34r89u9fvq603ougul3vcm88igrq</string>
 			</array>
 		</dict>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>remote-notification</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Lemon needs your location to find nearby scooters and show them on the map.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Lemon needs camera access to scan QR codes for unlocking scooters and verifying parking.</string>
+	<string>Lemon needs your location to track your ride and find nearby scooters.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Lemon needs background location to ensure your ride is tracked accurately even when the app is minimized.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Lemon uses motion sensors to detect suspicious activity and protect scooters from tampering.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

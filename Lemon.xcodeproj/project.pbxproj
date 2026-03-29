@@ -14,6 +14,8 @@
 		BC79704D2F308F0C0072E14D /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BC79704C2F308F0C0072E14D /* FirebaseFirestore */; };
 		BC7970592F30C7800072E14D /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = BC7970582F30C7800072E14D /* GoogleSignIn */; };
 		BC79705B2F30C7800072E14D /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = BC79705A2F30C7800072E14D /* GoogleSignInSwift */; };
+		BC7971012F30C7820072E14D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = BC7971002F30C7820072E14D /* FirebaseStorage */; };
+		BC7971032F30C7820072E14D /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = BC7971022F30C7820072E14D /* FirebaseAppCheck */; };
 		BCA78BBD2F333E4900E897E5 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = BCA78BBC2F333E4900E897E5 /* FirebaseDatabase */; };
 /* End PBXBuildFile section */
 
@@ -55,6 +57,8 @@
 				BC7970472F308F0C0072E14D /* FirebaseAnalyticsCore in Frameworks */,
 				BCA78BBD2F333E4900E897E5 /* FirebaseDatabase in Frameworks */,
 				BC7970592F30C7800072E14D /* GoogleSignIn in Frameworks */,
+				BC7971012F30C7820072E14D /* FirebaseStorage in Frameworks */,
+				BC7971032F30C7820072E14D /* FirebaseAppCheck in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -113,6 +117,8 @@
 				BC7970582F30C7800072E14D /* GoogleSignIn */,
 				BC79705A2F30C7800072E14D /* GoogleSignInSwift */,
 				BCA78BBC2F333E4900E897E5 /* FirebaseDatabase */,
+				BC7971002F30C7820072E14D /* FirebaseStorage */,
+				BC7971022F30C7820072E14D /* FirebaseAppCheck */,
 			);
 			productName = Lemon;
 			productReference = BC49F3172F0C3CFC000D41D7 /* Lemon.app */;
@@ -313,7 +319,8 @@
 				INFOPLIST_FILE = Lemon/Info.plist;
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleTypeRole = Viewer;\n    CFBundleURLName = \"com.lemonmobility.Lemon\";\n    CFBundleURLSchemes =     (\n        lemonapp\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to scan scooter QR codes.\nWe need camera access to scan scooter QR codes.\nWe need camera access to scan scooter QR codes.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lemon needs camera access to scan QR codes for unlocking scooters and verifying parking.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lemon needs your location to find nearby scooters and show them on the map.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -354,7 +361,8 @@
 				INFOPLIST_FILE = Lemon/Info.plist;
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleTypeRole = Viewer;\n    CFBundleURLName = \"com.lemonmobility.Lemon\";\n    CFBundleURLSchemes =     (\n        lemonapp\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to scan scooter QR codes.\nWe need camera access to scan scooter QR codes.\nWe need camera access to scan scooter QR codes.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lemon needs camera access to scan QR codes for unlocking scooters and verifying parking.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lemon needs your location to find nearby scooters and show them on the map.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -457,6 +465,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BC7970572F30C7800072E14D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		BC7971002F30C7820072E14D /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC7970432F308F0C0072E14D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		BC7971022F30C7820072E14D /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC7970432F308F0C0072E14D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
 		};
 		BCA78BBC2F333E4900E897E5 /* FirebaseDatabase */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -2,7 +2,7 @@
 //  RideRecord.swift
 //  Lemon
 //
-//  Created by Antigravity on 05/02/2026.
+//  Created by Shaluka Hewapatha on 05/02/2026.
 //
 
 import Foundation
@@ -35,4 +35,12 @@ struct RideRecord: Identifiable, Codable {
     var displayDistance: String {
         return String(format: "%.1f km", distanceKm)
     }
+    
+}
+
+struct TripData: Codable {
+    let duration: Int
+    let cost: Double
+    let count: Int
+    let distance: Double
 }

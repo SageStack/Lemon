@@ -2,7 +2,7 @@
 //  SideMenuView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -16,7 +16,7 @@ struct SideMenuView: View {
         ZStack {
             // Semi-transparent background for closing
             if isShowing {
-                Color.black.opacity(0.3)
+                Color.primary.opacity(0.3)
                     .ignoresSafeArea()
                     .onTapGesture {
                         withAnimation(.spring()) {
@@ -34,12 +34,17 @@ struct SideMenuView: View {
                             .frame(width: 60, height: 60)
                             .foregroundColor(.lemonPrimary)
                         
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text(authViewModel.currentUser?.name ?? "User")
                                 .font(.system(size: 20, weight: .bold))
+                            
                             Text("Premium Member")
-                                .font(.system(size: 12))
-                                .foregroundColor(.lemonPrimary)
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.lemonPrimary)
+                                .cornerRadius(20)
                         }
                     }
                     .padding(.top, 60)
@@ -102,7 +107,8 @@ struct SideMenuView: View {
     }
 }
 
-enum MenuItem: String, CaseIterable {
+enum MenuItem: String, CaseIterable, Identifiable {
+    var id: String { rawValue }
     case profile = "PROFILE"
     case history = "RIDE HISTORY"
     case payment = "PAYMENT"
@@ -131,19 +137,21 @@ struct MenuRow: View {
         Button(action: action) {
             HStack(spacing: 15) {
                 Image(systemName: item.icon)
-                    .foregroundColor(isSelected ? .black : .lemonPrimary)
-                    .frame(width: 24)
+                    .foregroundColor(isSelected ? .black : .white)
+                    .frame(width: 32, height: 32)
+                    .background(isSelected ? Color.clear : Color.lemonPrimary.opacity(0.8))
+                    .clipShape(Circle())
                 
                 Text(item.rawValue)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(isSelected ? .black : .white)
+                    .foregroundColor(isSelected ? .black : .primary)
                 
                 Spacer()
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 15)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
             .background(isSelected ? Color.lemonPrimary : Color.clear)
-            .cornerRadius(10)
+            .cornerRadius(12)
         }
     }
 }

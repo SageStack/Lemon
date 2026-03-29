@@ -2,7 +2,7 @@
 //  FirebaseConfig.swift
 //  Lemon
 //
-//  Created by Antigravity on 02/02/2026.
+//  Created by Shaluka Hewapatha on 02/02/2026.
 //
 
 import Foundation
@@ -32,7 +32,7 @@ class FirebaseManager {
     }
     
     var rtdb: DatabaseReference {
-        Database.database().reference()
+        Database.database(url: "https://lemon-app-final-prod-1-default-rtdb.asia-southeast1.firebasedatabase.app").reference()
     }
     
     var storage: Storage {

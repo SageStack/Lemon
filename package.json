@@ -4,8 +4,12 @@
   "description": "A simulator for Lemon scooters",
   "main": "scootersim.js",
   "dependencies": {
-    "dotenv": "^16.3.1",
+    "axios": "^1.13.5",
+    "dotenv": "^16.6.1",
     "firebase": "^10.8.0",
-    "firebase-admin": "^13.6.1"
+    "firebase-admin": "^11.11.1",
+    "firebase-tools": "^15.5.1",
+    "h3-js": "^4.4.0",
+    "ngeohash": "^0.6.3"
   }
 }

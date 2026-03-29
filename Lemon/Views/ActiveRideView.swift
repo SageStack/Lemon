@@ -2,7 +2,7 @@
 //  ActiveRideView.swift
 //  Lemon
 //
-//  Created by Antigravity on 06/01/2026.
+//  Created by Shaluka Hewapatha on 06/01/2026.
 //
 
 import SwiftUI
@@ -86,7 +86,24 @@ struct ActiveRideView: View {
                 }
                 
                 Button(action: {
-                    NotificationCenter.default.post(name: NSNotification.Name("RequestEndRide"), object: (rideDuration, rideCost, scooterIds.count, totalDistance))
+                    let earliestStart = activeScooters.compactMap { $0.currentRideStart }.min() ?? Date()
+                    let duration = Int(Date().timeIntervalSince(earliestStart))
+                    let durationMinutes = ceil(Double(duration) / 60.0)
+                    let baseCost = 100.0 * Double(max(1, activeScooters.count))
+                    let timeCost = durationMinutes * 20.0 * Double(max(1, activeScooters.count))
+                    let finalCost = baseCost + timeCost
+                    
+                    let tripData = TripData(
+                        duration: duration,
+                        cost: finalCost,
+                        count: scooterIds.count,
+                        distance: totalDistance
+                    )
+                    
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("RequestEndRide"), 
+                        object: tripData
+                    )
                 }) {
                     Text("END RIDE")
                         .font(.system(size: 16, weight: .black))
@@ -106,8 +123,21 @@ struct ActiveRideView: View {
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
         .onReceive(timer) { _ in
-            rideDuration += 1
-            rideCost = Double(rideDuration) * 0.5 * Double(max(1, scooterIds.count)) 
+            // Start High-Precision tracking
+            let startTimes = activeScooters.compactMap { $0.currentRideStart }
+            let earliestStart = startTimes.min() ?? Date()
+            
+            let duration = Int(Date().timeIntervalSince(earliestStart))
+            rideDuration = max(0, duration)
+            
+            // Use Centralized Cost Estimator for "Edge Truth"
+            let estimate = CostEstimator.estimateCost(startTime: earliestStart)
+            // Multiply by scooter count if group ride
+            let multiEstimate = estimate * Double(max(1, activeScooters.count))
+            
+            withAnimation(.linear) {
+                rideCost = multiEstimate
+            }
         }
         .onReceive(LocationManager.shared.$userLocation) { newLocation in
              guard let loc = newLocation else { return }
