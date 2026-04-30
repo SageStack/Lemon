@@ -48,6 +48,14 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        userLocation = LocationManager.autCityCampusLocation
+        currentSpeed = 0
+        return
+        #endif
+        #endif
+
         userLocation = location
         currentSpeed = location.speed
         

@@ -84,10 +84,12 @@ class ScooterService {
             }
             
             let cellRef = db.child("geo_shards").child(cell)
-            let handle = cellRef.observe(.value) { [weak self] snapshot in
+            let handle = cellRef.observe(.value, with: { [weak self] snapshot in
                 guard let self = self else { return }
                 self.handleShardUpdate(cell: cell, snapshot: snapshot, onUpdate: onUpdate)
-            }
+            }, withCancel: { error in
+                print("Realtime: ❌ Failed to observe geo shard \(cell): \(error.localizedDescription)")
+            })
             self.observers[cell] = (cellRef, handle)
         }
         

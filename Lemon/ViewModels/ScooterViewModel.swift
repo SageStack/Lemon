@@ -54,6 +54,24 @@ class ScooterViewModel: ObservableObject {
     
     /// IDs of scooters currently being "represented" on the map to ensure stickiness
     private var currentRepresentativeIds: Set<String> = []
+
+    private var scooterDiscoveryLocation: CLLocation? {
+        guard let location = LocationManager.shared.userLocation else {
+            return LocationManager.autCityCampusLocation
+        }
+
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        return LocationManager.autCityCampusLocation
+        #else
+        if location.distance(from: LocationManager.autCityCampusLocation) > 1000 {
+            return LocationManager.autCityCampusLocation
+        }
+        #endif
+        #endif
+
+        return location
+    }
     
     init() {
         print("Realtime: ScooterViewModel initialized")
@@ -175,7 +193,7 @@ class ScooterViewModel: ObservableObject {
     /// Master method to decide what data to fetch based on Zoom & Location
     @MainActor
     private func refreshData() async {
-        guard let location = LocationManager.shared.userLocation else { return }
+        guard let location = scooterDiscoveryLocation else { return }
         
         if currentLatitudeDelta > 0.06 { // Increased threshold slightly for cleaner detail view
             // ZOOMED OUT: AGGREGATES
@@ -257,7 +275,7 @@ class ScooterViewModel: ObservableObject {
 
     @MainActor
     private func updateH3Subscription() async {
-        guard let location = LocationManager.shared.userLocation else { return }
+        guard let location = scooterDiscoveryLocation else { return }
         
         // 1. Calculate Predictive Look-ahead
         var fetchLocation = location.coordinate
@@ -317,7 +335,7 @@ class ScooterViewModel: ObservableObject {
             return
         }
 
-        guard let userLoc = LocationManager.shared.userLocation else {
+        guard let userLoc = scooterDiscoveryLocation else {
             self.availableScooters = Array(allScooters.prefix(50))
             return
         }
