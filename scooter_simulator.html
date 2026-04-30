@@ -192,6 +192,7 @@
         let marker = null;
         let heartbeatInterval = null;
         let lastH3 = null; // Track H3 for cleanup
+        const DEFAULT_CENTER = { lat: -36.85361, lng: 174.766481, name: "AUT City Campus" };
         const qrcode = new QRCode(document.getElementById("qrcode"), { width: 180, height: 180 });
 
         // --- Geohash Helper ---
@@ -291,8 +292,8 @@
                 // AUTOMATED PROVISIONING: Register current user as a scooter instantly
                 const registerSelf = async () => {
                     const uid = user.uid;
-                    // Centering on user's last known good coordinates from logs for better visibility
-                    const pos = { lat: 6.864432 + (Math.random() - 0.5) * 0.005, lng: 79.921155 + (Math.random() - 0.5) * 0.005 };
+                    // Centering on AUT City Campus for better local testing visibility
+                    const pos = { lat: DEFAULT_CENTER.lat + (Math.random() - 0.5) * 0.005, lng: DEFAULT_CENTER.lng + (Math.random() - 0.5) * 0.005 };
                     
                     const snap = await db.ref('scooters/' + uid).once('value');
                     if (!snap.exists()) {
@@ -361,8 +362,8 @@
                 if (!snapshot.exists()) {
                     console.log("Seeding default fleet (Admin only)...");
                     const data = {
-                        "scooter_001": { name: "Lemon Pro #001", latitude: 6.864181, longitude: 79.921149, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
-                        "scooter_999": { name: "Lemon Max #999", latitude: 6.8920, longitude: 79.8510, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() }
+                        "scooter_001": { name: "Lemon Pro #001", latitude: DEFAULT_CENTER.lat, longitude: DEFAULT_CENTER.lng, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() },
+                        "scooter_999": { name: "Lemon Max #999", latitude: DEFAULT_CENTER.lat + 0.0012, longitude: DEFAULT_CENTER.lng - 0.0012, battery_percentage: 100, is_locked: true, is_available: true, last_updated: Date.now() }
                     };
                     Object.keys(data).forEach(k => data[k].geohash = Geohash.encode(data[k].latitude, data[k].longitude, 9));
                     
@@ -558,7 +559,7 @@
             const uid = auth.currentUser.uid;
             status("🆕 Registering " + uid + "...");
             
-            const pos = marker ? marker.getLatLng() : { lat: 6.864432, lng: 79.921155 };
+            const pos = marker ? marker.getLatLng() : DEFAULT_CENTER;
             const h3Idx = h3.latLngToCell(pos.lat, pos.lng, 8);
             const shardData = { id: uid, lat: pos.lat, lng: pos.lng, bat: 100, s: 'av' };
 
