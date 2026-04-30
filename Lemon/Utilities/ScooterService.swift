@@ -184,13 +184,33 @@ class ScooterService {
             "resolution": resolution
         ]
         
-        guard let result = try await callFunction(name: "getNearbyScooters", data: data),
-              let cells = result["cellIds"] as? [String] else {
-            return []
+        do {
+            guard let result = try await callFunction(name: "getNearbyScooters", data: data),
+                  let cells = result["cellIds"] as? [String] else {
+                return try await loadAvailableShardCellsFallback()
+            }
+
+            discoveryCache[cacheKey] = cells
+            return cells
+        } catch {
+            print("[ScooterService] ⚠️ Falling back to direct shard discovery: \(error.localizedDescription)")
+            let cells = try await loadAvailableShardCellsFallback()
+            discoveryCache[cacheKey] = cells
+            return cells
         }
-        
-        discoveryCache[cacheKey] = cells
-        return cells
+    }
+
+    private func loadAvailableShardCellsFallback() async throws -> [String] {
+        try await withCheckedThrowingContinuation { continuation in
+            db.child("geo_shards").observeSingleEvent(of: .value) { snapshot in
+                let cells = snapshot.children.compactMap { child -> String? in
+                    (child as? DataSnapshot)?.key
+                }
+                continuation.resume(returning: cells)
+            } withCancel: { error in
+                continuation.resume(throwing: error)
+            }
+        }
     }
     
     /// Subscribe to aggregate data (Res 6) for live updates

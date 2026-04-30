@@ -22,7 +22,7 @@ struct MapView: View {
     
     var body: some View {
         Map(position: $position) {
-            if scooterViewModel.showAggregates {
+            if scooterViewModel.showAggregates && !scooterViewModel.aggregates.isEmpty {
                 // Render Aggregates (Clusters)
                 ForEach(scooterViewModel.aggregates) { aggregate in
                     Annotation("Cluster", coordinate: aggregate.coordinate) {
