@@ -16,7 +16,7 @@ struct MapView: View {
     let scooters: [Scooter]
     
     @State private var position: MapCameraPosition = .userLocation(fallback: .region(MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
+        center: CLLocationCoordinate2D(latitude: -36.85361, longitude: 174.766481),
         span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
     )))
     
