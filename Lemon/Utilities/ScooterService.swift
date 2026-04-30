@@ -75,6 +75,7 @@ class ScooterService {
         let cellsToAdd = newCells.subtracting(currentCells)
         if !cellsToAdd.isEmpty {
             print("Realtime: 📡 Subscribing to \(cellsToAdd.count) new H3 shards...")
+            NSLog("LemonScooters: subscribing_to_shards count=%d cells=%@", cellsToAdd.count, Array(cellsToAdd).joined(separator: ","))
         }
         
         for cell in cellsToAdd {
@@ -84,10 +85,12 @@ class ScooterService {
             }
             
             let cellRef = db.child("geo_shards").child(cell)
-            let handle = cellRef.observe(.value) { [weak self] snapshot in
+            let handle = cellRef.observe(.value, with: { [weak self] snapshot in
                 guard let self = self else { return }
                 self.handleShardUpdate(cell: cell, snapshot: snapshot, onUpdate: onUpdate)
-            }
+            }, withCancel: { error in
+                print("Realtime: ❌ Failed to observe geo shard \(cell): \(error.localizedDescription)")
+            })
             self.observers[cell] = (cellRef, handle)
         }
         
@@ -106,6 +109,7 @@ class ScooterService {
         // If snapshot is null or not a dict, the shard is empty
         guard let value = snapshot.value as? [String: Any] else { 
             shardCache[cell] = []
+            NSLog("LemonScooters: shard_update cell=%@ raw_count=0 parsed_count=0", cell)
             pushCombinedUpdate(onUpdate: onUpdate)
             return 
         }
@@ -140,12 +144,14 @@ class ScooterService {
         }
         
         shardCache[cell] = cellScooters
+        NSLog("LemonScooters: shard_update cell=%@ raw_count=%d parsed_count=%d", cell, value.count, cellScooters.count)
         StorageService.shared.saveShard(cell: cell, scooters: cellScooters)
         pushCombinedUpdate(onUpdate: onUpdate)
     }
     
     private func pushCombinedUpdate(onUpdate: @escaping ([Scooter]) -> Void) {
         let allScooters = shardCache.values.flatMap { $0 }
+        NSLog("LemonScooters: combined_scooters count=%d", allScooters.count)
         // Debounce or throttle could go here
         onUpdate(allScooters)
     }
@@ -175,6 +181,7 @@ class ScooterService {
         let cacheKey = "\(latQ)_\(lngQ)_\(resolution)"
         
         if let cached = discoveryCache[cacheKey] {
+            NSLog("LemonScooters: host_cells cache_hit count=%d lat=%.6f lng=%.6f", cached.count, latitude, longitude)
             return cached
         }
         
@@ -184,13 +191,37 @@ class ScooterService {
             "resolution": resolution
         ]
         
-        guard let result = try await callFunction(name: "getNearbyScooters", data: data),
-              let cells = result["cellIds"] as? [String] else {
-            return []
+        do {
+            guard let result = try await callFunction(name: "getNearbyScooters", data: data),
+                  let cells = result["cellIds"] as? [String] else {
+                return try await loadAvailableShardCellsFallback()
+            }
+
+            discoveryCache[cacheKey] = cells
+            NSLog("LemonScooters: host_cells function_count=%d lat=%.6f lng=%.6f", cells.count, latitude, longitude)
+            return cells
+        } catch {
+            print("[ScooterService] ⚠️ Falling back to direct shard discovery: \(error.localizedDescription)")
+            let cells = try await loadAvailableShardCellsFallback()
+            discoveryCache[cacheKey] = cells
+            NSLog("LemonScooters: host_cells fallback_count=%d lat=%.6f lng=%.6f error=%@", cells.count, latitude, longitude, error.localizedDescription)
+            return cells
         }
-        
-        discoveryCache[cacheKey] = cells
-        return cells
+    }
+
+    private func loadAvailableShardCellsFallback() async throws -> [String] {
+        try await withCheckedThrowingContinuation { continuation in
+            db.child("geo_shards").observeSingleEvent(of: .value) { snapshot in
+                let cells = snapshot.children.compactMap { child -> String? in
+                    (child as? DataSnapshot)?.key
+                }
+                NSLog("LemonScooters: fallback_cells count=%d", cells.count)
+                continuation.resume(returning: cells)
+            } withCancel: { error in
+                NSLog("LemonScooters: fallback_cells_error %@", error.localizedDescription)
+                continuation.resume(throwing: error)
+            }
+        }
     }
     
     /// Subscribe to aggregate data (Res 6) for live updates

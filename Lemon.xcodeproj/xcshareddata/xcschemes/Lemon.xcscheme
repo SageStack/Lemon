@@ -51,12 +51,13 @@
             ReferencedContainer = "container:Lemon.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-         <CommandLineArgument
-            argument = "-AppCheckDebugToken 779638C3-B16F-4A18-9F99-F9BE1A40B40E"
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "FIRAAppCheckDebugToken"
+            value = "14910E9F-19C8-4452-B995-9CB3D0884DD6"
             isEnabled = "YES">
-         </CommandLineArgument>
-      </CommandLineArguments>
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

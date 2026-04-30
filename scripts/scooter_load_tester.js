@@ -13,8 +13,8 @@ admin.initializeApp({
 const db = admin.database();
 
 async function simulateScooters(count = 1000) {
-    const centerLat = 6.9271;
-    const centerLon = 79.8612;
+    const centerLat = -36.85361;
+    const centerLon = 174.766481;
     const radius = 0.5; // degrees (~50km)
 
     console.log(`Simulating ${count} scooters...`);

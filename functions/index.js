@@ -213,6 +213,18 @@ exports.unlockScooter = functions.https.onCall(async (data, context) => {
   const scooterId = data.scooterId;
   validateScooterId(scooterId);
 
+  const scooterRef = db.ref(`scooters/${scooterId}`);
+  const snap = await scooterRef.once('value');
+  const s = snap.val();
+
+  if (!s) {
+      throw new functions.https.HttpsError("not-found", "Scooter not found.");
+  }
+
+  if (s.is_locked === false || s.is_available === false) {
+      throw new functions.https.HttpsError("failed-precondition", "Scooter is already unlocked or unavailable.");
+  }
+
   const secureRef = db.ref(`scooter_secure_data/${scooterId}`);
   
   // Use transaction to atomically check and reserve
@@ -246,14 +258,11 @@ exports.unlockScooter = functions.https.onCall(async (data, context) => {
   // We don't change location here, just status. 
   // Status change affects Shard "s" field, so we should update shard.
   // We can do a lightweight shard update.
-  const scooterRef = db.ref(`scooters/${scooterId}`);
-  const snap = await scooterRef.once('value');
-  const s = snap.val();
-  
   await scooterRef.update({
       is_locked: false,
       is_available: false,
       current_ride_client_id: userId,
+      status: 'in',
       last_updated: admin.database.ServerValue.TIMESTAMP
   });
   

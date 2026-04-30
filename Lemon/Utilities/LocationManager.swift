@@ -12,8 +12,10 @@ import UIKit // Required for ObservableObject and @Published
 
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationManager()
+    static let autCityCampusLocation = CLLocation(latitude: -36.85361, longitude: 174.766481)
+
     private let manager = CLLocationManager()
-    @Published var userLocation: CLLocation?
+    @Published var userLocation: CLLocation? = LocationManager.autCityCampusLocation
     
     private var lastUpdateDate: Date = Date()
     private var currentSpeed: CLLocationSpeed = 0
@@ -46,6 +48,14 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        userLocation = LocationManager.autCityCampusLocation
+        currentSpeed = 0
+        return
+        #endif
+        #endif
+
         userLocation = location
         currentSpeed = location.speed
         

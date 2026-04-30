@@ -47,7 +47,7 @@ struct ScanningView: View {
                             // In a real app, we'd fetch the scooter first to check is_locked
                             // But for this simulation, we'll try to unlock it.
                             let loc = LocationManager.shared.userLocation?.coordinate
-                            try await ScooterService.shared.unlockScooter(id: code, latitude: loc?.latitude ?? 0, longitude: loc?.longitude ?? 0)
+                            try await ScooterService.shared.unlockScooter(id: code, latitude: loc?.latitude ?? 0, longitude: loc?.longitude ?? 0, useQueue: false)
                             
                             // Trigger success haptic on unlock
                             HapticManager.shared.notification(.success)
@@ -63,7 +63,7 @@ struct ScanningView: View {
                         } catch {
                             print("Unlock failed: \(error.localizedDescription)")
                             await MainActor.run {
-                                errorMessage = "Unlock failed. Please try again."
+                                errorMessage = "Unlock failed: \(error.localizedDescription)"
                                 showingError = true
                                 isProcessing = false
                             }

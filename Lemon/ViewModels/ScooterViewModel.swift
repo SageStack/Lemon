@@ -54,6 +54,23 @@ class ScooterViewModel: ObservableObject {
     
     /// IDs of scooters currently being "represented" on the map to ensure stickiness
     private var currentRepresentativeIds: Set<String> = []
+
+    private var scooterDiscoveryLocation: CLLocation? {
+        guard let location = LocationManager.shared.userLocation else {
+            NSLog("LemonScooters: discovery_location=AUT_FALLBACK reason=no_gps")
+            return LocationManager.autCityCampusLocation
+        }
+
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        NSLog("LemonScooters: discovery_location=AUT_CAMPUS reason=simulator")
+        return LocationManager.autCityCampusLocation
+        #endif
+        #endif
+
+        NSLog("LemonScooters: discovery_location=REAL lat=%.6f lng=%.6f", location.coordinate.latitude, location.coordinate.longitude)
+        return location
+    }
     
     init() {
         print("Realtime: ScooterViewModel initialized")
@@ -72,6 +89,7 @@ class ScooterViewModel: ObservableObject {
         errorMessage = nil
         
         print("Realtime: 🚀 Starting H3-based scooter discovery...")
+        NSLog("LemonScooters: load_started")
         
         // Initial Fetch
         await refreshData()
@@ -175,7 +193,7 @@ class ScooterViewModel: ObservableObject {
     /// Master method to decide what data to fetch based on Zoom & Location
     @MainActor
     private func refreshData() async {
-        guard let location = LocationManager.shared.userLocation else { return }
+        guard let location = scooterDiscoveryLocation else { return }
         
         if currentLatitudeDelta > 0.06 { // Increased threshold slightly for cleaner detail view
             // ZOOMED OUT: AGGREGATES
@@ -257,7 +275,7 @@ class ScooterViewModel: ObservableObject {
 
     @MainActor
     private func updateH3Subscription() async {
-        guard let location = LocationManager.shared.userLocation else { return }
+        guard let location = scooterDiscoveryLocation else { return }
         
         // 1. Calculate Predictive Look-ahead
         var fetchLocation = location.coordinate
@@ -295,8 +313,10 @@ class ScooterViewModel: ObservableObject {
             lastSubscriptionLocation = location
             lastSubscriptionResolution = currentResolution
             
+            NSLog("LemonScooters: h3_subscription fetchLat=%.6f fetchLng=%.6f cellCount=%d", fetchLocation.latitude, fetchLocation.longitude, cells.count)
             if !cells.isEmpty {
                 print("Realtime: ✅ Received \(cells.count) cells. Subscribing...")
+                NSLog("LemonScooters: subscribe_request cell_count=%d", cells.count)
                 ScooterService.shared.subscribeToCells(cells: cells) { [weak self] updatedScooters in
                     DispatchQueue.main.async {
                         self?.updateScooterList(updatedScooters)
@@ -311,14 +331,17 @@ class ScooterViewModel: ObservableObject {
     @MainActor
     private func updateScooterList(_ allScooters: [Scooter]) {
         self.scooters = allScooters
+        NSLog("LemonScooters: update_input total=%d showAggregates=%@", allScooters.count, String(showAggregates))
         
         // If showing aggregates, ignore scooter updates unless we have an active ride
         if showAggregates {
+            NSLog("LemonScooters: update_skipped reason=showAggregates total=%d", allScooters.count)
             return
         }
 
-        guard let userLoc = LocationManager.shared.userLocation else {
+        guard let userLoc = scooterDiscoveryLocation else {
             self.availableScooters = Array(allScooters.prefix(50))
+            NSLog("LemonScooters: visible_scooters count=%d reason=no_location", self.availableScooters.count)
             return
         }
 
@@ -335,7 +358,7 @@ class ScooterViewModel: ObservableObject {
         // 2. Filter by distance and availability
         // Street Level: < ~120m
         // Mid Level: < ~300m
-        let maxDistance: CLLocationDistance = currentLatitudeDelta < 0.01 ? 120 : 300
+        let maxDistance: CLLocationDistance = currentLatitudeDelta < 0.01 ? 300 : 500
 
         let availableCandidates = sortedScooters.filter { scooter in
             // Basic Availability
@@ -352,6 +375,17 @@ class ScooterViewModel: ObservableObject {
             let distance = userLoc.distance(from: CLLocation(latitude: scooter.latitude, longitude: scooter.longitude))
             return distance <= maxDistance
         }
+        let nearestDistance = sortedScooters
+            .map { userLoc.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude)) }
+            .min() ?? -1
+        NSLog(
+            "LemonScooters: filter_result total=%d candidates=%d maxDistance=%.0f nearest=%.1f latDelta=%.5f",
+            allScooters.count,
+            availableCandidates.count,
+            maxDistance,
+            nearestDistance,
+            currentLatitudeDelta
+        )
 
         // 3. Apply Sticky Representative Logic
         // Prioritize scooters that were already visible to prevent replacement flicker
@@ -375,6 +409,7 @@ class ScooterViewModel: ObservableObject {
             self.availableScooters = finalSelection
             self.currentRepresentativeIds = Set(finalSelection.map { $0.id })
             print("Realtime: ✅ Updated Map with \(finalSelection.count) stable markers (Sticky: \(stillValidReps.count))")
+            NSLog("LemonScooters: visible_scooters count=%d ids=%@", finalSelection.count, finalSelection.map { $0.id }.joined(separator: ","))
             
             NotificationManager.shared.evaluateScenarios(
                 scooters: finalSelection,

@@ -33,11 +33,17 @@ try {
 
 const db = admin.database();
 
+const DEFAULT_CENTER = {
+  lat: -36.85361,
+  lng: 174.766481,
+  name: "AUT City Campus"
+};
+
 const SCOOTERS_TO_SIMULATE = [
-  { name: "Lemon S1 #1024", lat: 6.9270, lng: 79.8440 },
-  { name: "Lemon S1 #4402", lat: 6.8960, lng: 79.8550 },
-  { name: "Lemon S2 Lite #99", lat: 6.9050, lng: 79.8700 },
-  { name: "Lemon S1 Pro #501", lat: 6.9150, lng: 79.8600 }
+  { name: "Lemon S1 #1024" },
+  { name: "Lemon S1 #4402" },
+  { name: "Lemon S2 Lite #99" },
+  { name: "Lemon S1 Pro #501" }
 ];
 
 let activeScooterIds = [];
@@ -48,8 +54,8 @@ async function initializeScooters() {
 
   for (const s of SCOOTERS_TO_SIMULATE) {
       // Offset slightly to provide variety around the user
-      const startLat = 6.8644 + (Math.random() - 0.5) * 0.01;
-      const startLng = 79.9211 + (Math.random() - 0.5) * 0.01;
+      const startLat = DEFAULT_CENTER.lat + (Math.random() - 0.5) * 0.01;
+      const startLng = DEFAULT_CENTER.lng + (Math.random() - 0.5) * 0.01;
       
       console.log(`Creating scooter (Force): ${s.name}`);
       const newScooterRef = scootersRef.push();

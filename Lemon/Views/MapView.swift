@@ -15,14 +15,14 @@ struct MapView: View {
     @ObservedObject var scooterViewModel: ScooterViewModel
     let scooters: [Scooter]
     
-    @State private var position: MapCameraPosition = .userLocation(fallback: .region(MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
+    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: -36.85361, longitude: 174.766481),
         span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
-    )))
+    ))
     
     var body: some View {
         Map(position: $position) {
-            if scooterViewModel.showAggregates {
+            if scooterViewModel.showAggregates && !scooterViewModel.aggregates.isEmpty {
                 // Render Aggregates (Clusters)
                 ForEach(scooterViewModel.aggregates) { aggregate in
                     Annotation("Cluster", coordinate: aggregate.coordinate) {
