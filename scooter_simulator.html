@@ -329,7 +329,10 @@
                     }, 500);
                 };
                 
-                registerSelf();
+                registerSelf().catch(e => {
+                    console.error("Registration Error:", e);
+                    status("❌ Registration Failed: " + e.message, true);
+                });
                 initFleet();
             } else {
                 console.warn("🔐 Not authenticated. Signing in anonymously...");
@@ -372,6 +375,7 @@
                 }
                 loadFleetDropdown();
             }, e => {
+                clearTimeout(timeout);
                 console.error("Read Error:", e);
                 status("❌ Connect Error (Rules): Check if UID can read /scooters", true);
             });
@@ -586,8 +590,6 @@
                 }, 500);
             }).catch(e => status("❌ Registration Failed: " + e.message, true));
         };
-
-        initFleet();
     </script>
 </body>
 </html>
