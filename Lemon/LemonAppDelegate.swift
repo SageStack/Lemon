@@ -42,15 +42,13 @@ class LemonAppDelegate: NSObject, UIApplicationDelegate {
         
         // Initialize App Check before FirebaseApp.configure()
         #if DEBUG
-        // App Check Debug Provider initialized. 
-        // Note: Register the token printed by Firebase (I-GAC004001) in the Firebase Console.
-        if let token = ProcessInfo.processInfo.environment["FIRAAppCheckDebugToken"] {
-            UserDefaults.standard.set(token, forKey: "FIRAAppCheckDebugToken")
-            print("[AppCheck] Debug token loaded from FIRAAppCheckDebugToken environment variable.")
-        } else {
-            print("[AppCheck] Missing FIRAAppCheckDebugToken environment variable.")
-        }
-        print("[AppCheck] Debug Provider Factory initialized.")
+        // Hardcoded debug token registered in Firebase Console.
+        // This ensures App Check works whether launched from Xcode or directly from the device.
+        let debugToken = ProcessInfo.processInfo.environment["FIRAAppCheckDebugToken"]
+            ?? "14910E9F-19C8-4452-B995-9CB3D0884DD6"
+        setenv("FIRAAppCheckDebugToken", debugToken, 1)
+        UserDefaults.standard.set(debugToken, forKey: "FIRAAppCheckDebugToken")
+        print("[AppCheck] Debug token: \(debugToken)")
         #endif
 
         let providerFactory = LemonAppCheckProviderFactory()

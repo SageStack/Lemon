@@ -36,6 +36,14 @@ class AuthViewModel: NSObject, ObservableObject {
         self.isAuthenticated = UserDefaults.standard.bool(forKey: "isAuthenticated")
         print("Auth: AuthViewModel Initialized (Previously Authenticated: \(self.isAuthenticated))")
         setupAuthStateListener()
+
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        Task { @MainActor in
+            await signInForSimulatorDebug()
+        }
+        #endif
+        #endif
     }
     
     private func setupAuthStateListener() {
@@ -53,6 +61,23 @@ class AuthViewModel: NSObject, ObservableObject {
         print("Auth: Checking session...")
         updateAuthState(user: auth.currentUser)
     }
+
+    #if DEBUG
+    @MainActor
+    private func signInForSimulatorDebug() async {
+        guard auth.currentUser == nil else {
+            NSLog("LemonScooters: simulator_debug_auth existing_uid=%@", auth.currentUser?.uid ?? "")
+            return
+        }
+
+        do {
+            let result = try await auth.signInAnonymously()
+            NSLog("LemonScooters: simulator_debug_auth signed_in_uid=%@", result.user.uid)
+        } catch {
+            NSLog("LemonScooters: simulator_debug_auth failed=%@", error.localizedDescription)
+        }
+    }
+    #endif
     
     @MainActor
     func login(email: String, password: String) async {
